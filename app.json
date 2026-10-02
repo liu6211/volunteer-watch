@@ -9,7 +9,16 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.liu.volunteerwatch"
+      "bundleIdentifier": "com.liu.volunteerwatch",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "fetch",
+          "processing"
+        ],
+        "BGTaskSchedulerPermittedIdentifiers": [
+          "com.expo.modules.backgroundtask.processing"
+        ]
+      }
     },
     "android": {
       "package": "com.liu.volunteerwatch",
@@ -31,7 +40,8 @@
         {
           "color": "#2E7D32"
         }
-      ]
+      ],
+      "expo-background-task"
     ],
     "extra": {
       "router": {},
