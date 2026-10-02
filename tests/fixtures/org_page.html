@@ -1,0 +1,273 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>都匀三中青年志愿者服务队-志愿贵州</title>
+<script src="https://code.bdstatic.com/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+<script src="https://cdn.staticfile.org/jquery-migrate/3.5.2/jquery-migrate.min.js"></script>
+<script type="text/javascript" src="https://css.zhiyuanyun.com/lib/common.js"></script>
+<script type="text/javascript" src="https://css.zhiyuanyun.com/common/login.js"></script>
+<script>
+$(window).scroll(function (){
+    var f=$('#ptit');
+    var top=$(this).scrollTop();
+    var top_o=$('#main_body').offset().top;
+    if(top>top_o){
+        f.css({'position':'absolute','top':top+'px','left':$('#main_body').find('.wrap').offset().left+'px','background':'#ffffff','margin-top':'0px'});
+    }else{
+        f.css({'position':'inherit'});
+    }
+});
+</script>
+<!--[if lte IE 6]>
+<script language="javascript" type="text/javascript" src="https://css.zhiyuanyun.com/lib/png.js" ></script>
+<script type="text/javascript">
+    DD_belatedPNG.fix('div, ul, li, input , a, a:hover, h2, b');
+</script>
+<![endif]-->
+<script type="text/javascript" src="https://css.zhiyuanyun.com/common/front.js"></script>
+<link href="https://css.zhiyuanyun.com/default/style.css" rel="stylesheet" type="text/css">
+<link href="https://css.zhiyuanyun.com/default/style.css" rel="stylesheet" type="text/css">
+<meta name="renderer" content="webkit|ie-stand">
+</head>
+<body>
+<div class="header">
+    <div class="wrap clearfix topmenu">
+        <meta name="csrf-token" content="ca7c9b985d9980cf6f023de484ff1200649d83fc3b59cb7ce518ecab18001ab5">
+<script>
+    $(document).ready(function(){
+
+        $.ajaxSetup({
+            headers:
+            { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') }
+        });
+    });
+</script>
+<script type="text/javascript" src="/app/api/site.all.js"></script>
+<span class="l" style="width:600px;">
+            <a href="/app/user/login.php" style="color:red">亲，请登录</a>&nbsp;
+        <a href="/app/user/register.php">志愿者注册</a>&nbsp;/&nbsp;<a href="/app/user/register.php?type=org">志愿团体注册</a>&nbsp;&nbsp;
+    </span>
+
+<span class="r topmenu_r">
+        <div class="topmenu_txt">    
+        <a href="/app/opp/opp.edit.php">发起项目</a>
+    </div>
+        <div class="topmenu_txt">    
+        <a href="/app/user/home.php" class="arrow1">志愿中心</a>
+        <div class="topmenu_con">
+            <ul>
+                <li><a href="/app/opp/opp.my.php">我的项目</a></li>
+                                <li><a href="/app/user/hour.php">我的时长</a></li>
+                <li><a href="/app/org/org.my.php">我的团体</a></li>
+                                            </ul>
+        </div>
+    </div>
+                <script>
+    $(function(){
+   
+        
+    
+});
+</script>        </span>
+    </div>
+</div>
+
+<div class="header_logo">
+    <div class="wrap clearfix">
+        <a href="/" class="l logo"><span>贵州省</span></a>
+        <div class="r clearfix" style="width:550px;">
+            <div class="l tsearch clearfix" style="width:350px;">
+                <div class="l" style="width:76px;height:44px;line-height:44px;text-align:center;">
+                            <div id="tsearch_select">
+                                <div id="select">志愿团体</div><input type="hidden" id="stype" value="2">                                <div id="tsearch_select_div">
+                                    <a href="javascript:void(0);" onclick="$('#tsearch_select>#select').html($(this).html());$('#stype').val(1);chpos(this);">志愿项目</a>
+                                    <a href="javascript:void(0);" onclick="$('#tsearch_select>#select').html($(this).html());$('#stype').val(2);chpos(this);">志愿团体</a>
+                                    <a href="javascript:void(0);" onclick="$('#tsearch_select>#select').html($(this).html());$('#stype').val(3);chpos(this);">新闻文章</a>
+                                </div>
+                            </div>  
+                </div>
+                <div class="l">
+                    &nbsp;&nbsp;&nbsp;<input style="width:140px;" type="text" class="sq" id="sq" value="">
+                </div>
+                <div class="r">
+                    <a href="javascript:void(0);" onclick="top_search();" class="rrsearch"></a>
+                </div>
+                
+            </div>
+
+            <div class="r rlogo">
+                <a href="https://www.zhiyuanyun.com" target="_blank" style="width:130px;height:110px;display:block;"></a>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="nav">
+    <div class="wrap">
+        <a href="/" style="width:71px;">首页</a><a href="/app/opp/list.php" >志愿项目</a><a href="/app/org/list.php" class="sel">志愿团体</a><a href="/app/help/list.php" >求助中心</a><a href="//www.zhiyuanyun.com/cate/zyzg_zyfc/" target="_blank">志愿风采</a><a href="//www.zhiyuanyun.com/cate/zyzg_xxdt/" target="_blank">信息动态</a><a href="//www.zhiyuanyun.com/cate/zyzg_mtbd/" target="_blank">媒体报道</a><a href="//www.zhiyuanyun.com/cate/zyzg_yjpx/" target="_blank">研究培训</a><a href="//www.zhiyuanyun.com/cate/zyzg_zcwj/" target="_blank">政策文件</a><a href="//www.zhiyuanyun.com/cate/zyzg_syzn/" target="_blank">使用指南</a>
+    </div>
+</div>
+<div class="main" id="main_body">
+    <div class="wrap opptop clearfix" id="ptit">
+        <h1 class="l">
+            【6385777】&nbsp;都匀三中青年志愿者服务队        </h1>
+        <span class="opp_org_join_status r">&nbsp;&nbsp;</span>
+    </div>
+    <div class="wrap clearfix m10">
+        <div class="conl">
+            <div class="clearfix">
+                <div class="l desc_img listimg_org">
+                                        <a><img src="//s.zhiyuanyun.com/qn.zygz.org.cn/avatar/201505/09/thumb_554e04862109a.png" onerror="this.src='//s.zhiyuanyun.com/qn.zygz.org.cn/avatar/201505/09/554e04862109a.png';"></a>
+                                    </div>
+                <div class="l desc_txt">
+                    <table>
+                        <tr><th>区域：</th><td>黔南布依族苗族自治州</td></tr>
+                        <tr><th>详细地址：</th><td>都匀市平桥南路13号</td></tr>
+                        <tr><th>人员规模：</th><td><span>5000</span></td></tr>
+                        <tr><th>正式成员：</th><td><span>4150</span></td></tr>
+                        <tr><th>加入方式：</th><td>验证信息加入（需审核申请）</td></tr>
+                        <!--<tr><th>成立日期：</th><td><span>2014-12-05</span></td></tr>-->
+						<tr><th>联络团体：</th><td><a href="/app/org/view.php?id=Lgh8cRbucuOpE" target="_blank">都匀市志愿者联合会</a></td></tr>                        <tr><th>团体分享到：</th><td><div class="bdsharebuttonbox l"><a href="#" class="bds_more" data-cmd="more"></a><a title="分享到QQ空间" href="#" class="bds_qzone" data-cmd="qzone"></a><a title="分享到新浪微博" href="#" class="bds_tsina" data-cmd="tsina"></a><a title="分享到腾讯微博" href="#" class="bds_tqq" data-cmd="tqq"></a><a title="分享到人人网" href="#" class="bds_renren" data-cmd="renren"></a><a title="分享到微信" href="#" class="bds_weixin" data-cmd="weixin"></a></div>
+                            
+                            </td></tr>
+                        
+                    </table>
+                </div>
+                
+                <div class="con10" style="position:relative;clear:both;">
+                    <div style="position:absolute;right:0;top:0;">
+                                                                        <a href="javascript:void(0);" onclick="org_join(6385777,0);" class="but_alert">我要加入</a>
+                                                                    </div>
+                    <div class="clearfix tab1">
+                        <a id="tabs1" href="javascript:void(0);">团体简介</a>
+                        <a id="tabs2" href="javascript:void(0);">发起的项目</a>
+                        <a id="tabs3" href="javascript:void(0);">留言咨询</a>                    </div>
+                </div>
+                <div class="con10" id="con1">
+                    都匀三中青年志愿者服务队是由志愿从事社会公益事业与社会保障事业的青年学生及教师组成的志愿团体，隶属于都匀市青年志愿者联合会。主要通过组织和指导青年志愿服务活动，为社会提供志愿服务，推动社会主义精神文明建设，促进社会主义市场经济体制的建立和完善，提高青年的整体素质，为经济社会的协调发展和全面进步做出贡献。服务队在宪法和法律的范围内开展工作，奉行“奉献、友爱、互助、进步”的准则。                </div>
+                <div class="con10" id="con2" style="display:none;">
+                    <div id="opps"><table class="table1"><tr><th>项目名称</th><th width="120">发布日期</th><th width="100">项目状态</th></tr><tr><td><a href="/app/opp/view.php?id=wimQexjMasBw8" target="_blank">20261006万达广场一号门宠物领养志愿服务</a></td><td>2026-10-01</td><td><font color="green">运行中</font></td></tr><tr><td><a href="/app/opp/view.php?id=2ODoVUzekfBFZ" target="_blank">20261005万达广场一号门宠物领养志愿服务</a></td><td>2026-10-01</td><td><font color="green">运行中</font></td></tr><tr><td><a href="/app/opp/view.php?id=WyC4x3wZ2JJIq" target="_blank">20261002健心跑环保志愿服务</a></td><td>2026-09-30</td><td><font color="green">运行中</font></td></tr><tr><td><a href="/app/opp/view.php?id=2ODoVX0j4xBFZ" target="_blank">20260925亲爱的校园时光活动准备志愿活动</a></td><td>2026-09-25</td><td><font color="green">运行中</font></td></tr><tr><td><a href="/app/opp/view.php?id=bbnJQ2F2D4zjT" target="_blank">20260928-30亲爱的校园时光阶梯教室放映室志愿服务</a></td><td>2026-09-24</td><td><font color="blue">自动结项</font></td></tr><tr><td><a href="/app/opp/view.php?id=lYvX0A1XOxGF4" target="_blank">20260928-29亲爱的校园时光田家炳一楼及广场志愿服务</a></td><td>2026-09-24</td><td><font color="green">运行中</font></td></tr><tr><td><a href="/app/opp/view.php?id=B5oPSTeYA13dx" target="_blank">亲爱的校园时光室内体育馆门口（AI互动屏前）</a></td><td>2026-09-24</td><td><font color="blue">手工结项</font></td></tr><tr><td><a href="/app/opp/view.php?id=7BNCNcH5N78H3" target="_blank">20260928-30游园会志愿服务</a></td><td>2026-09-23</td><td><font color="green">运行中</font></td></tr><tr><td><a href="/app/opp/view.php?id=inDxjwMI1xSSY" target="_blank">20260929亲爱的校园时光校训石志愿者</a></td><td>2026-09-23</td><td><font color="blue">手工结项</font></td></tr><tr><td><a href="/app/opp/view.php?id=WajmE4bZwacb6" target="_blank">20260913-19流浪猫喂食志愿服务</a></td><td>2026-09-21</td><td><font color="blue">手工结项</font></td></tr><tr><td><a href="/app/opp/view.php?id=enC=h=DGfqCn9" target="_blank">20260919黔南州博物馆志愿服务</a></td><td>2026-09-16</td><td><font color="blue">手工结项</font></td></tr><tr><td><a href="/app/opp/view.php?id=sD2jPTw17zlM1" target="_blank">20260826都匀市图书馆志愿服务</a></td><td>2026-08-25</td><td><font color="blue">自动结项</font></td></tr><tr><td><a href="/app/opp/view.php?id=IhokmqBmt6hoB" target="_blank">20260815都匀市图书馆志愿服务</a></td><td>2026-08-14</td><td><font color="blue">自动结项</font></td></tr><tr><td><a href="/app/opp/view.php?id=5za9gnEfWSkWa" target="_blank">20260808下午黔南州州博物馆联合志愿服务</a></td><td>2026-08-05</td><td><font color="blue">手工结项</font></td></tr><tr><td><a href="/app/opp/view.php?id=0SaYyiD1ghCSX" target="_blank">20260808上午黔南州州博物馆联合志愿服务</a></td><td>2026-08-05</td><td><font color="blue">手工结项</font></td></tr><tr><td><a href="/app/opp/view.php?id=bB5DnMIxWGdKz" target="_blank">20260806黔南州州博物馆联合志愿服务</a></td><td>2026-08-05</td><td><font color="blue">手工结项</font></td></tr><tr><td><a href="/app/opp/view.php?id=1d7AD89WkX44w" target="_blank">20260804暑期学校拔草志愿服务</a></td><td>2026-08-03</td><td><font color="blue">手工结项</font></td></tr><tr><td><a href="/app/opp/view.php?id=WyEDWRKZ1nJIq" target="_blank">20260803暑期学校拔草志愿服务</a></td><td>2026-08-02</td><td><font color="blue">手工结项</font></td></tr><tr><td><a href="/app/opp/view.php?id=4QR9IwYl8GUNl" target="_blank">20260802暑期学校拔草志愿服务</a></td><td>2026-08-01</td><td><font color="blue">手工结项</font></td></tr><tr><td><a href="/app/opp/view.php?id=8kxsqtjj8A66i" target="_blank">20260801暑期学校拔草志愿服务</a></td><td>2026-07-31</td><td><font color="blue">手工结项</font></td></tr></table><div class="pagebar"><span class="now_class">1</span><a href="javascript:void(0);" onclick="get_opps(2,6385777,2);">2</a><a href="javascript:void(0);" onclick="get_opps(2,6385777,3);">3</a><a href="javascript:void(0);" onclick="get_opps(2,6385777,4);">4</a><a href="javascript:void(0);" onclick="get_opps(2,6385777,5);">5</a><a href="javascript:void(0);" onclick="get_opps(2,6385777,6);">6</a><a href="javascript:void(0);" onclick="get_opps(2,6385777,32);">32</a></div><div style="clear:both;height:10px"></div></div>
+                </div>
+                <div class="con10" id="con3" style="display:none;">
+									<div id="comment"><table><tr><td class="org_desc" width="90" valign="top"><a href="/app/user/view.php?id=b2YmK5QVaytdD" target="_blank"><img src="https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg" onerror="this.src='https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg';"></a></td><td valign="top" class="org_desc org_desc2"><a href="/app/user/view.php?id=Xn4j5zlLiy7yc" target="_blank">吴昊</a>&nbsp;&nbsp;&nbsp;2025-02-28 13:27:09 &nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(519893,232559510);">回复</a><br>根本抢不到志愿<div class="creply"><a href="/app/user/view.php?id=6BgjqWKOrH2k4" target="_blank">罗恒磊</a>&nbsp;&nbsp;&nbsp;回复&nbsp;&nbsp;&nbsp;<a href="/app/user/view.php?id=TpJVwEmzScKA6" target="_blank">吴昊</a>&nbsp;&nbsp;&nbsp;2026-04-11 22:00:56&nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(519893,234974411);">回复</a><br>点击输入文本</div></td></tr><tr><td class="org_desc" width="90" valign="top"><a href="/app/user/view.php?id==XDms2U8jA5FR" target="_blank"><img src="https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg" onerror="this.src='https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg';"></a></td><td valign="top" class="org_desc org_desc2"><a href="/app/user/view.php?id=OGsZY1x1NDiEi" target="_blank">蔡海洋</a>&nbsp;&nbsp;&nbsp;2024-12-20 19:02:07 &nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(519724,233470304);">回复</a><br>你好<div class="creply"><a href="/app/user/view.php?id=XJpMao=vnhK9=" target="_blank">林胤鸿</a>&nbsp;&nbsp;&nbsp;回复&nbsp;&nbsp;&nbsp;<a href="/app/user/view.php?id=LTFPgDtIMukMV" target="_blank">蔡海洋</a>&nbsp;&nbsp;&nbsp;2025-01-12 17:47:10&nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(519724,233492186);">回复</a><br>不是</div></td></tr><tr><td class="org_desc" width="90" valign="top"><a href="/app/user/view.php?id=Mz8JtMqAKnDLF" target="_blank"><img src="https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg" onerror="this.src='https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg';"></a></td><td valign="top" class="org_desc org_desc2"><a href="/app/user/view.php?id=egeIYx=MiqLJL" target="_blank">聂鸣哲</a>&nbsp;&nbsp;&nbsp;2024-11-29 13:27:04 &nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(519625,233316896);">回复</a><br>你好<div class="creply"><a href="/app/user/view.php?id=zngU3phA4pPSe" target="_blank">申云琪</a>&nbsp;&nbsp;&nbsp;回复&nbsp;&nbsp;&nbsp;<a href="/app/user/view.php?id=bn8TaO9P6q0NM" target="_blank">聂鸣哲</a>&nbsp;&nbsp;&nbsp;2024-12-01 01:29:42&nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(519625,233222279);">回复</a><br>我勒个豆</div><div class="creply"><a href="/app/user/view.php?id==eV1SdO0Wu9On" target="_blank">罗文卿</a>&nbsp;&nbsp;&nbsp;回复&nbsp;&nbsp;&nbsp;<a href="/app/user/view.php?id=PG=GpLXazWrAQ" target="_blank">申云琪</a>&nbsp;&nbsp;&nbsp;2025-01-21 19:08:30&nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(519625,233192721);">回复</a><br>你好</div></td></tr><tr><td class="org_desc" width="90" valign="top"><a href="/app/user/view.php?id=bn8seg3O9P0nM" target="_blank"><img src="https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg" onerror="this.src='https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg';"></a></td><td valign="top" class="org_desc org_desc2"><a href="/app/user/view.php?id=CIG7QomakJYRa" target="_blank">王瀚卿</a>&nbsp;&nbsp;&nbsp;2024-05-01 09:02:40 &nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(518047,230665293);">回复</a><br>hi</td></tr><tr><td class="org_desc" width="90" valign="top"><a href="/app/user/view.php?id==IeHmBgIAvSJU" target="_blank"><img src="https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg" onerror="this.src='https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg';"></a></td><td valign="top" class="org_desc org_desc2"><a href="/app/user/view.php?id=js0EtAIsspu9d" target="_blank">闭轩朗</a>&nbsp;&nbsp;&nbsp;2024-01-30 22:42:27 &nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(517626,103770530);">回复</a><br>大家加油！<div class="creply"><a href="/app/user/view.php?id=Mg6qNM9WpD9OH" target="_blank">王龙玲</a>&nbsp;&nbsp;&nbsp;回复&nbsp;&nbsp;&nbsp;<a href="/app/user/view.php?id=gn3izS9q7o3B5" target="_blank">闭轩朗</a>&nbsp;&nbsp;&nbsp;2026-09-24 20:19:11&nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(517626,233811407);">回复</a><br>哇哦</div></td></tr><tr><td class="org_desc" width="90" valign="top"><a href="/app/user/view.php?id=MjJ7HFQ2piwj2" target="_blank"><img src="https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg" onerror="this.src='https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg';"></a></td><td valign="top" class="org_desc org_desc2"><a href="/app/user/view.php?id=Lu8fFwhCPO7WC" target="_blank">赵浩铭</a>&nbsp;&nbsp;&nbsp;2023-12-15 18:11:41 &nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(517439,231187758);">回复</a><br>有没有志愿服务</td></tr><tr><td class="org_desc" width="90" valign="top"><a href="/app/user/view.php?id=164lerH65Ntf9" target="_blank"><img src="https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg" onerror="this.src='https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg';"></a></td><td valign="top" class="org_desc org_desc2"><a href="/app/user/view.php?id=371p5J9e5ULfb" target="_blank">王瀚卿</a>&nbsp;&nbsp;&nbsp;2023-09-08 21:56:14 &nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(516363,230665293);">回复</a><br>hello<div class="creply"><a href="/app/user/view.php?id=Hg2nPTMZ2JTeW" target="_blank">黄家诚</a>&nbsp;&nbsp;&nbsp;回复&nbsp;&nbsp;&nbsp;<a href="/app/user/view.php?id=jWUFEVgxQa6xK" target="_blank">王瀚卿</a>&nbsp;&nbsp;&nbsp;2023-09-16 12:26:39&nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(516363,230438159);">回复</a><br>我也是</div></td></tr><tr><td class="org_desc" width="90" valign="top"><a href="/app/user/view.php?id=MjJ7HF01pAJQ2" target="_blank"><img src="https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg" onerror="this.src='https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg';"></a></td><td valign="top" class="org_desc org_desc2"><a href="/app/user/view.php?id=oOqha6XbvwkGs" target="_blank">罗粤</a>&nbsp;&nbsp;&nbsp;2023-08-28 22:27:50 &nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(516301,231136429);">回复</a><br>好耶</td></tr><tr><td class="org_desc" width="90" valign="top"><a href="/app/user/view.php?id=BdVzMIPxTxSvo" target="_blank"><img src="https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg" onerror="this.src='https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg';"></a></td><td valign="top" class="org_desc org_desc2"><a href="/app/user/view.php?id=164lerLK5oof9" target="_blank">罗灏</a>&nbsp;&nbsp;&nbsp;2023-04-21 19:32:51 &nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(515617,230694013);">回复</a><br>加入</td></tr><tr><td class="org_desc" width="90" valign="top"><a href="/app/user/view.php?id=OGsHYCSrNBRGi" target="_blank"><img src="https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg" onerror="this.src='https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg';"></a></td><td valign="top" class="org_desc org_desc2"><a href="/app/user/view.php?id=Qd=mCXtUCfwHx" target="_blank">王瀚卿</a>&nbsp;&nbsp;&nbsp;2023-04-15 21:04:38 &nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(515587,230665293);">回复</a><br>终于加进来了</td></tr><tr><td class="org_desc" width="90" valign="top"><a href="/app/user/view.php?id==IvVm4JkRvXJU" target="_blank"><img src="https://css.zhiyuanyun.com/default/images/noimg_avatar_0.jpg" onerror="this.src='https://css.zhiyuanyun.com/default/images/noimg_avatar_0.jpg';"></a></td><td valign="top" class="org_desc org_desc2"><a href="/app/user/view.php?id=bupkKzFBpyOdD" target="_blank">李子玺</a>&nbsp;&nbsp;&nbsp;2023-01-15 16:03:40 &nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(514935,119496180);">回复</a><br>好多人啊 终于从网页进来了</td></tr><tr><td class="org_desc" width="90" valign="top"><a href="/app/user/view.php?id=F3gdpZLwbvX9T" target="_blank"><img src="https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg" onerror="this.src='https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg';"></a></td><td valign="top" class="org_desc org_desc2"><a href="/app/user/view.php?id=ItMYzt6v7BBt3" target="_blank">吴安汐文</a>&nbsp;&nbsp;&nbsp;2023-01-13 20:30:31 &nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(514930,230229543);">回复</a><br>终于加入了不容易</td></tr><tr><td class="org_desc" width="90" valign="top"><a href="/app/user/view.php?id=7IkMof753JDvr" target="_blank"><img src="https://css.zhiyuanyun.com/default/images/noimg_avatar_0.jpg" onerror="this.src='https://css.zhiyuanyun.com/default/images/noimg_avatar_0.jpg';"></a></td><td valign="top" class="org_desc org_desc2"><a href="/app/user/view.php?id=Mzdmt0qmKyBIF" target="_blank">陆道珍</a>&nbsp;&nbsp;&nbsp;2022-09-25 16:58:46 &nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(512959,228212962);">回复</a><br>好多学长学姐<div class="creply"><a href="/app/user/view.php?id=k5dpSdDrAiOu7" target="_blank">刘然兮</a>&nbsp;&nbsp;&nbsp;回复&nbsp;&nbsp;&nbsp;<a href="/app/user/view.php?id=MjT5H=CPqxZs2" target="_blank">陆道珍</a>&nbsp;&nbsp;&nbsp;2023-01-12 20:51:56&nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(512959,218237492);">回复</a><br>是的</div><div class="creply"><a href="/app/user/view.php?id=XOrvaska4npsl" target="_blank">罗冰雪</a>&nbsp;&nbsp;&nbsp;回复&nbsp;&nbsp;&nbsp;<a href="/app/user/view.php?id=3QPeGeWzNUZdY" target="_blank">陆道珍</a>&nbsp;&nbsp;&nbsp;2024-01-28 00:24:28&nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(512959,232076414);">回复</a><br>这倒是真的…</div><div class="creply"><a href="/app/user/view.php?id=4CNshWyR=41iu" target="_blank">罗冰雪</a>&nbsp;&nbsp;&nbsp;回复&nbsp;&nbsp;&nbsp;<a href="/app/user/view.php?id=0CgwjFXQQBvFv" target="_blank">陆道珍</a>&nbsp;&nbsp;&nbsp;2024-01-28 00:24:31&nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(512959,232076414);">回复</a><br>这倒是真的…</div></td></tr><tr><td class="org_desc" width="90" valign="top"><a href="/app/user/view.php?id=FvVEb84acvb8T" target="_blank"><img src="https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg" onerror="this.src='https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg';"></a></td><td valign="top" class="org_desc org_desc2"><a href="/app/user/view.php?id=3Nev0ozr6ooQX" target="_blank">王念杰</a>&nbsp;&nbsp;&nbsp;2019-10-24 22:15:58 &nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(260368,144980952);">回复</a><br>不容易找到<div class="creply"><a href="/app/user/view.php?id=D7dMMTTPO7KXk" target="_blank">朱钟毅</a>&nbsp;&nbsp;&nbsp;回复&nbsp;&nbsp;&nbsp;<a href="/app/user/view.php?id=Xrn5uznzjyPvc" target="_blank">王念杰</a>&nbsp;&nbsp;&nbsp;2019-10-25 17:39:59&nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(260368,145243527);">回复</a><br>对呀</div></td></tr><tr><td class="org_desc" width="90" valign="top"><a href="/app/user/view.php?id=7NmcZ6rbCJ19r" target="_blank"><img src="https://css.zhiyuanyun.com/default/images/noimg_avatar_0.jpg" onerror="this.src='https://css.zhiyuanyun.com/default/images/noimg_avatar_0.jpg';"></a></td><td valign="top" class="org_desc org_desc2"><a href="/app/user/view.php?id=keaxBJwsRdF87" target="_blank">王童瑶</a>&nbsp;&nbsp;&nbsp;2019-10-21 21:17:25 &nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(259928,144598129);">回复</a><br>大家好<div class="creply"><a href="/app/user/view.php?id=NBrOpQvy7GFW0" target="_blank">黄煜森</a>&nbsp;&nbsp;&nbsp;回复&nbsp;&nbsp;&nbsp;<a href="/app/user/view.php?id=7FL=V11tN2Etz" target="_blank">王童瑶</a>&nbsp;&nbsp;&nbsp;2019-10-23 22:04:16&nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(259928,144979411);">回复</a><br>嘿嘿</div></td></tr><tr><td class="org_desc" width="90" valign="top"><a href="/app/user/view.php?id=q0XAp0Aac1HQh" target="_blank"><img src="https://css.zhiyuanyun.com/default/images/noimg_avatar_0.jpg" onerror="this.src='https://css.zhiyuanyun.com/default/images/noimg_avatar_0.jpg';"></a></td><td valign="top" class="org_desc org_desc2"><a href="/app/user/view.php?id=LfdkHFJHyt7kC" target="_blank">艾思奇</a>&nbsp;&nbsp;&nbsp;2019-05-25 16:35:45 &nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(244886,128423856);">回复</a><br>母校这么厉害
+</td></tr><tr><td class="org_desc" width="90" valign="top"><a href="/app/user/view.php?id=YG4lq1jerOgKj" target="_blank"><img src="https://css.zhiyuanyun.com/default/images/noimg_avatar_0.jpg" onerror="this.src='https://css.zhiyuanyun.com/default/images/noimg_avatar_0.jpg';"></a></td><td valign="top" class="org_desc org_desc2"><a href="/app/user/view.php?id=A5xbDJjLFdlyw" target="_blank">蔡旻靖</a>&nbsp;&nbsp;&nbsp;2018-10-08 23:38:58 &nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(217656,99910003);">回复</a><br>还要审核进入嘛……</td></tr><tr><td class="org_desc" width="90" valign="top"><a href="/app/user/view.php?id=LjL1hD9VO6HqV" target="_blank"><img src="https://css.zhiyuanyun.com/default/images/noimg_avatar_0.jpg" onerror="this.src='https://css.zhiyuanyun.com/default/images/noimg_avatar_0.jpg';"></a></td><td valign="top" class="org_desc org_desc2"><a href="/app/user/view.php?id=IpIR=865nBPL3" target="_blank">杨惠匀</a>&nbsp;&nbsp;&nbsp;2017-03-12 11:03:45 &nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(149317,32782793);">回复</a><br>加入不了项目</td></tr><tr><td class="org_desc" width="90" valign="top"><a href="/app/user/view.php?id=Fa8OjAZpQIuXK" target="_blank"><img src="https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg" onerror="this.src='https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg';"></a></td><td valign="top" class="org_desc org_desc2"><a href="/app/user/view.php?id=xDY6hB77TddaJ" target="_blank">殷明睿</a>&nbsp;&nbsp;&nbsp;2015-03-18 15:04:14 &nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(107395,9463890);">回复</a><br>大家辛苦了</td></tr><tr><td class="org_desc" width="90" valign="top"><a href="/app/user/view.php?id=OTl3HqQ4NklL2" target="_blank"><img src="https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg" onerror="this.src='https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg';"></a></td><td valign="top" class="org_desc org_desc2"><a href="/app/user/view.php?id=AJ4oTCvnC7hzx" target="_blank">殷明睿</a>&nbsp;&nbsp;&nbsp;2015-03-18 15:03:44 &nbsp;&nbsp;&nbsp;<a href="javascript:void(0);" onclick="show_reply(107394,9463890);">回复</a><br>大家好
+大家快乐。
+
+
+</td></tr></table><div class="pagebar"><span class="now_class">1</span><a href="javascript:void(0);" onclick="get_comment(2,6385777,2);">2</a></div><div style="clear:both;height:10px"></div><div id="creply"><div style="margin:10px"><p class="r_ptitle">在这里畅所欲言吧~~</p><input type="hidden" id="comment_type" value="2"><input type="hidden" id="source_id" value="6385777"><input type="hidden" id="uid_reply" value="0"><input type="hidden" id="parent_id" value="0"><textarea class="txt1" style="width:600px;" id="content"></textarea><br><br><span><a href="javascript:void(0);" onclick="do_reply(this);" class="but1">发布评论</a></span></div></div><div style="clear:both;height:10px"></div></div>
+				                </div>
+            </div>
+        </div>
+        <div class="conr">
+            <div class="tit m10">团体联系人</div>
+            <div class="boxcon">
+                <table>
+                    <tr>
+                        <td valign="top" class="org_desc">
+                            <span>常丽瑛</span><br>
+                                                                                        邮箱：343737442#qq.com<br>
+								（请将#替换成@以后发送邮件）
+                                <!--  <div style="margin-top:5px;">    
+                                    <a class="but_alert" href="javascript:void(0);" onclick="show_cpl();" >我要投诉</a>
+                                </div>  -->
+                        </td>
+                    </tr>
+                </table>
+            </div>
+            <div class="tit">团体二维码</div>
+            <div class="boxcon" style="text-align:center;">
+                <img src="/images/qrcode/org/6385/6385777wx_6.png" width="160">
+                <p>微信扫一扫即可加入或分享本团体</p>
+            </div>
+            <div class="tit">服务评价</div>
+            <div class="boxcon">
+                <div style="line-height:180%;margin-top:10px;">
+                对项目开展培训的满意度：4.97<br>
+                与志愿团体合作的满意度：4.91<br>
+                项目执行与计划的符合度：4.97                </div>
+            </div>
+            
+            <style type="text/css">
+                #allmap {width:250px;height: 240px; overflow:hidden;margin-top:10px;}
+            </style>
+            <div class="tit">团体地址</div>
+            <!--<div id="allmap"></div>-->
+                        <div class="boxcon m10" style="font-size:12px;">
+                都匀市平桥南路13号<br><a class="but_alert" style="display:none;" href="javascript:void(0);" onclick="C.alert.opacty({'title':'查看地图','width':'720','height':'460','url':'/app/sys/map.php?x=107.52232369269&y=26.272501223022'});">查看地图</a>&nbsp;&nbsp;
+            </div>
+            
+            <div class="tit">推荐团体</div>
+            <div class="boxcon"><ul>
+                        </ul></div>
+            <div class="tit">推荐项目</div>
+            <div class="boxcon"><ul>
+                        </ul></div>
+            
+        </div>
+    </div>
+</div>
+<div class="footer clearfix">
+    <div class="wrap m10">
+        ICP备案编号：<a href="//beian.miit.gov.cn" target="_blank">京ICP备13002525号-7</a>&nbsp;&nbsp;版权所有：志愿贵州<br>
+        <a href="//www.zhiyuanyun.com/cate/zyzg_syzn/" target="_blank">使用指南</a>&nbsp;&nbsp;
+        <a href="//www.zhiyuanyun.com/cate/zyzg_syzn/" target="_blank">使用指南</a>&nbsp;&nbsp;
+		<a href="//www.zhiyuanyun.com/show/1040107.html" target="_blank">联系我们</a>&nbsp;&nbsp;
+		技术支持：<a href="//www.zhiyuanyun.com" target="_blank">志愿云系统</a>&nbsp;&nbsp;<a href="//www.zhiyuanyun.net" target="_blank">志愿云技术</a><br>
+		为了达到最好效果，推荐使用 <a href="//www.microsoft.com/zh-cn/edge" target="_blank">Microsoft Edge</a>或 <a href="//www.firefox.com.cn/" target="_blank">Mozilla Firefox</a>浏览器
+    </div>
+</div>
+<link href="https://css.zhiyuanyun.com/default/kf.css" rel="stylesheet" type="text/css">
+<script type="text/javascript" src="https://css.zhiyuanyun.com/default/kf.js"></script>
+<script type="text/javascript">
+	var kftophtml;
+	kftophtml="<div id=\"kf_menu\" class=\"kf_menu\">";
+	kftophtml=kftophtml+"<a href=\"https://www.zhiyuanyun.com/show/1032305.html\" target=\"_blank\" class=\"kf-btn kf-btn-cz\"><div class=\"txt\">操作指南</div></a>";
+	kftophtml=kftophtml+"<div class=\"kf-btn kf-btn-wx\"><img class=\"wx_pic\" src=\"https://css.zhiyuanyun.com/default/img/zyyzj_wx.gif\"><div class=\"txt\">微信咨询</div></div>";
+	kftophtml=kftophtml+"<div class=\"kf-btn kf-btn-xcx\"><img class=\"xcx_pic\" src=\"https://css.zhiyuanyun.com/default/img/zyy_xcx.png\"><div class=\"txt\">小程序</div></div>";
+	kftophtml=kftophtml+"<div class=\"kf-btn kf-btn-top\"><div class=\"txt\">回到顶部</div></div>";
+	kftophtml=kftophtml+"</div>";
+</script>
+<div id="kf_top"></div>
+<script>
+var _hmt = _hmt || [];
+(function() {
+  var hm = document.createElement("script");
+  hm.src = "https://hm.baidu.com/hm.js?6e998aedad8b74dcc885da4b51e06aee";
+  var s = document.getElementsByTagName("script")[0]; 
+  s.parentNode.insertBefore(hm, s);
+})();
+</script>
+<!--  <div id="add_cpl" style="display:none;">
+    <input type="hidden" id="cpl_from_type" value="2">
+        <input type="hidden" id="cpl_from_id" value="6385777">
+    <table class="m10">
+        <tr>
+            <td align="right"><span class="fim">*</span>被投诉对象：</td>
+            <td><input class="ipt" type="text" id="cpl_to_object" value=""  placeholder="志愿者姓名/团体名称/项目名称"><span class="v_result"></span></td>
+        </tr>
+        <tr>
+            <td align="right" valign="top"><span class="fim"></span>投诉内容：</td>
+            <td><textarea class="txt1" type="text" id="cpl_to_content" style="width:260px;height:50px;"></textarea><span class="v_result"></span></td>
+        </tr>
+        <tr>
+            <td align="right"><span class="fim">*</span>投诉人姓名：</td>
+            <td><input class="ipt" type="text" id="cpl_from_name" value=""  placeholder=""><span class="v_result"></span></td>
+        </tr>
+        <tr>
+            <td align="right"><span class="fim">*</span>投诉人证件号码：</td>
+            <td><input class="ipt" type="text" id="cpl_from_idcard" value=""  placeholder=""><span class="v_result"></span></td>
+        </tr>
+        <tr>
+            <td align="right"><span class="fim">*</span>投诉人联系电话：</td>
+            <td><input class="ipt" type="text" id="cpl_from_mobile" value=""  placeholder=""><span class="v_result"></span></td>
+        </tr>
+        
+        <tr>
+            <td width="150"></td>
+            <td><a href="javascript:void(0);" onclick="add_cpl(this)" class="but1" id="but_add">提交数据</a></td>
+        </tr>
+    </table>
+</div>  -->
+</body>
+</html>
+<script>window._bd_share_config={"common":{"bdSnsKey":{},"bdText":"","bdMini":"2","bdMiniList":false,"bdPic":"","bdStyle":"1","bdSize":"16"},"share":{},"image":{"viewList":["qzone","tsina","tqq","renren","weixin"],"viewText":"分享到：","viewSize":"16"},"selectShare":{"bdContainerClass":null,"bdSelectMiniList":["qzone","tsina","tqq","renren","weixin"]}};with(document)0[(getElementsByTagName('head')[0]||body).appendChild(createElement('script')).src='http://bdimg.share.baidu.com/static/api/js/share.js?v=89860593.js?cdnversion='+~(-new Date()/36e5)];</script>
