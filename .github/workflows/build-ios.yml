@@ -7,13 +7,15 @@ on:
 
 jobs:
   build-ios-unsigned:
-    runs-on: macos-15
-    timeout-minutes: 75
+    # macos-26 默认带 Xcode 26.6；macos-15 只有到 26.3，
+    # 而 expo-modules-jsi 在 26.3 上会因 Swift 严格并发诊断报错。
+    # 详见下面 Patch 步骤的注释。
+    runs-on: macos-26
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
-      # 需要最新的 26.x（Swift 6.2.4），因为它只剩一个可修补的错误
-      - name: Select newest Xcode 26.x (needs Swift 6.2)
+      - name: Select newest Xcode
         run: |
           echo "===== available Xcodes ====="
           ls -d /Applications/Xcode*.app || true
@@ -32,13 +34,9 @@ jobs:
         with:
           node-version: 22
 
-      - name: Show toolchain versions
+      - name: Show versions
         run: |
-          echo "===== sw_vers ====="
           sw_vers
-          echo "===== xcodebuild -version ====="
-          xcodebuild -version
-          echo "===== node / npm ====="
           node -v
           npm -v
 
@@ -49,51 +47,40 @@ jobs:
         run: npm run test:offline
 
       # 修补 Expo 上游 bug：expo-modules-jsi 把 SWIFT_RETURNS_RETAINED
-      # 误加在【构造函数】上。构造函数没有「返回值」这个概念，该标注只对
-      # 工厂函数有意义；类级别已经有正确的 SWIFT_SHARED_REFERENCE，
-      # 所以删掉这两个标注是语义等价的。
+      # 误加在【构造函数】上。构造函数没有「返回值」概念，该标注只对工厂
+      # 函数有意义；类级别已有正确的 SWIFT_SHARED_REFERENCE（下面的校验会
+      # 确认它没被破坏），所以删掉这两个标注是语义等价的。
+      #
       # Xcode 26.2+ 的 Clang 会把它报成错误：
       #   'RuntimeScheduler' cannot be annotated with either
       #   SWIFT_RETURNS_RETAINED or SWIFT_RETURNS_NOT_RETAINED
       # 已确认上游 58.0.7 仍未修复，故在 CI 内打补丁。
-      - name: Patch expo-modules-jsi for Xcode 26.x
+      - name: Patch expo-modules-jsi for Xcode 26.2+
         run: |
           HDR=node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h
-          PKG=node_modules/expo-modules-jsi/apple/Package.swift
-          for f in "$HDR" "$PKG"; do
-            if [ ! -f "$f" ]; then echo "::error::file not found: $f"; exit 1; fi
-          done
+          if [ ! -f "$HDR" ]; then
+            echo "::error::header not found: $HDR"
+            exit 1
+          fi
 
-          echo "########## 补丁 1：构造函数上的 SWIFT_RETURNS_RETAINED ##########"
           echo "---- before ----"
           grep -n "SWIFT_RETURNS_RETAINED" "$HDR" || echo "(none)"
+
           # 用 perl 而不是 sed -i：macOS 的 BSD sed 要求 `-i ''`，
           # 直接 `sed -i` 会把替换脚本当成备份后缀而报错。
           perl -pi -e 's/SWIFT_RETURNS_RETAINED RuntimeScheduler\(/RuntimeScheduler(/g' "$HDR"
+
           echo "---- after ----"
           grep -n "SWIFT_RETURNS_RETAINED" "$HDR" || echo "(removed from constructors)"
 
-          echo "########## 补丁 2：Swift 6 -> 5 语言模式 ##########"
-          echo "---- before ----"
-          grep -n "swiftLanguageModes" "$PKG"
-          # 该包在 Swift 6 严格并发下有一批 "sending ... risks causing data races"
-          # 错误（expo-modules-jsi 57.1.1 与 58.0.7 都一样，属上游未修复）。
-          # 降到 Swift 5 语言模式只会把这些诊断变成警告，不改变代码生成与运行时行为。
-          perl -pi -e 's/swiftLanguageModes:\s*\[\.v6\]/swiftLanguageModes: [.v5]/' "$PKG"
-          echo "---- after ----"
-          grep -n "swiftLanguageModes" "$PKG"
-
-          echo "########## 一致性校验 ##########"
+          # 一致性校验：别把类级标注或构造函数签名改坏
           if ! grep -q "SWIFT_SHARED_REFERENCE" "$HDR"; then
             echo "::error::class-level SWIFT_SHARED_REFERENCE was lost"; exit 1
           fi
           if ! grep -q "RuntimeScheduler(void \*scheduler, ScheduleFn fn)" "$HDR"; then
             echo "::error::scheduler constructor signature changed unexpectedly"; exit 1
           fi
-          if ! grep -q "swiftLanguageModes: \[\.v5\]" "$PKG"; then
-            echo "::error::swiftLanguageModes patch did not apply"; exit 1
-          fi
-          echo "both patches OK"
+          echo "patch OK"
 
       - name: Prebuild iOS project
         run: npx expo prebuild --platform ios --clean
@@ -140,12 +127,8 @@ jobs:
           echo "===== total log lines: $(wc -l < /tmp/xcodebuild.log) ====="
           echo "===== ALL error: lines ====="
           grep -n "error:" /tmp/xcodebuild.log | head -60 || echo "(no 'error:' lines)"
-          echo "===== SPM resolution error context (40 lines after) ====="
-          grep -n -A 40 "Could not resolve package dependencies" /tmp/xcodebuild.log | head -80 || true
-          echo "===== any xcodebuild error blocks ====="
-          grep -n -B 3 -A 30 "xcodebuild: error" /tmp/xcodebuild.log | head -100 || true
-          echo "===== last 60 lines ====="
-          tail -60 /tmp/xcodebuild.log
+          echo "===== last 80 lines ====="
+          tail -80 /tmp/xcodebuild.log
 
           if [ $STATUS -ne 0 ]; then
             echo "::error::xcodebuild failed with exit code $STATUS"
