@@ -81,10 +81,12 @@ jobs:
           echo "===== total log lines: $(wc -l < /tmp/xcodebuild.log) ====="
           echo "===== ALL error: lines ====="
           grep -n "error:" /tmp/xcodebuild.log | head -60 || echo "(no 'error:' lines)"
-          echo "===== failing script phase context ====="
-          grep -n -B 5 -A 25 "Build ExpoModulesJSI" /tmp/xcodebuild.log | head -120 || true
-          echo "===== last 150 lines ====="
-          tail -150 /tmp/xcodebuild.log
+          echo "===== SPM resolution error context (40 lines after) ====="
+          grep -n -A 40 "Could not resolve package dependencies" /tmp/xcodebuild.log | head -80 || true
+          echo "===== any xcodebuild error blocks ====="
+          grep -n -B 3 -A 30 "xcodebuild: error" /tmp/xcodebuild.log | head -100 || true
+          echo "===== last 60 lines ====="
+          tail -60 /tmp/xcodebuild.log
 
           if [ $STATUS -ne 0 ]; then
             echo "::error::xcodebuild failed with exit code $STATUS"
