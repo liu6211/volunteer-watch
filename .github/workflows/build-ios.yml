@@ -56,34 +56,44 @@ jobs:
       #   'RuntimeScheduler' cannot be annotated with either
       #   SWIFT_RETURNS_RETAINED or SWIFT_RETURNS_NOT_RETAINED
       # 已确认上游 58.0.7 仍未修复，故在 CI 内打补丁。
-      - name: Patch expo-modules-jsi (upstream Xcode 26.2+ bug)
+      - name: Patch expo-modules-jsi for Xcode 26.x
         run: |
           HDR=node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h
-          if [ ! -f "$HDR" ]; then
-            echo "::error::header not found: $HDR"
-            exit 1
-          fi
+          PKG=node_modules/expo-modules-jsi/apple/Package.swift
+          for f in "$HDR" "$PKG"; do
+            if [ ! -f "$f" ]; then echo "::error::file not found: $f"; exit 1; fi
+          done
 
-          echo "===== before ====="
+          echo "########## 补丁 1：构造函数上的 SWIFT_RETURNS_RETAINED ##########"
+          echo "---- before ----"
           grep -n "SWIFT_RETURNS_RETAINED" "$HDR" || echo "(none)"
-
           # 用 perl 而不是 sed -i：macOS 的 BSD sed 要求 `-i ''`，
           # 直接 `sed -i` 会把替换脚本当成备份后缀而报错。
           perl -pi -e 's/SWIFT_RETURNS_RETAINED RuntimeScheduler\(/RuntimeScheduler(/g' "$HDR"
-
-          echo "===== after ====="
+          echo "---- after ----"
           grep -n "SWIFT_RETURNS_RETAINED" "$HDR" || echo "(removed from constructors)"
 
-          echo "===== sanity checks ====="
+          echo "########## 补丁 2：Swift 6 -> 5 语言模式 ##########"
+          echo "---- before ----"
+          grep -n "swiftLanguageModes" "$PKG"
+          # 该包在 Swift 6 严格并发下有一批 "sending ... risks causing data races"
+          # 错误（expo-modules-jsi 57.1.1 与 58.0.7 都一样，属上游未修复）。
+          # 降到 Swift 5 语言模式只会把这些诊断变成警告，不改变代码生成与运行时行为。
+          perl -pi -e 's/swiftLanguageModes:\s*\[\.v6\]/swiftLanguageModes: [.v5]/' "$PKG"
+          echo "---- after ----"
+          grep -n "swiftLanguageModes" "$PKG"
+
+          echo "########## 一致性校验 ##########"
           if ! grep -q "SWIFT_SHARED_REFERENCE" "$HDR"; then
-            echo "::error::class-level SWIFT_SHARED_REFERENCE was lost"
-            exit 1
+            echo "::error::class-level SWIFT_SHARED_REFERENCE was lost"; exit 1
           fi
           if ! grep -q "RuntimeScheduler(void \*scheduler, ScheduleFn fn)" "$HDR"; then
-            echo "::error::scheduler constructor signature changed unexpectedly"
-            exit 1
+            echo "::error::scheduler constructor signature changed unexpectedly"; exit 1
           fi
-          echo "patch OK"
+          if ! grep -q "swiftLanguageModes: \[\.v5\]" "$PKG"; then
+            echo "::error::swiftLanguageModes patch did not apply"; exit 1
+          fi
+          echo "both patches OK"
 
       - name: Prebuild iOS project
         run: npx expo prebuild --platform ios --clean
