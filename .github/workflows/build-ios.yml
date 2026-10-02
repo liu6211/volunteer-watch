@@ -12,33 +12,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 关键：Xcode 版本的窗口很窄，两个条件必须同时满足：
-      #   1) Swift tools >= 6.2 —— 否则 ExpoModulesJSI 的 SPM 包报
-      #      "package 'apple' is using Swift tools version 6.2.0 but the installed version is 6.1.0"
-      #      （macos-15 默认的 Xcode 16.4 就是 6.1，不行）
-      #   2) Xcode < 26.2 —— 因为 expo-modules-jsi 把 SWIFT_RETURNS_RETAINED
-      #      误加在构造函数上，Xcode 26.2+ 的 Clang 会直接报错
-      #      （已确认上游 58.0.7 仍未修复，属 Expo 已知问题）
-      # 所以选 26.0/26.1 系列：Swift 6.2 有了，又还没开始报这个错。
-      - name: Select Xcode (Swift 6.2 but < 26.2)
+      # 需要最新的 26.x（Swift 6.2.4），因为它只剩一个可修补的错误
+      - name: Select newest Xcode 26.x (needs Swift 6.2)
         run: |
           echo "===== available Xcodes ====="
           ls -d /Applications/Xcode*.app || true
-
-          CANDIDATES="/Applications/Xcode_26.1.1.app /Applications/Xcode_26.1.app /Applications/Xcode_26.0.1.app /Applications/Xcode_26.0.app"
-          CHOSEN=""
-          for c in $CANDIDATES; do
-            if [ -d "$c" ]; then CHOSEN="$c"; break; fi
-          done
-
-          # 兜底：挑一个 26.x 里最小的（而不是最大的），避免落到 26.2+
-          if [ -z "$CHOSEN" ]; then
-            CHOSEN=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | head -1)
-          fi
+          CHOSEN=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
           if [ -z "$CHOSEN" ]; then
             CHOSEN=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
           fi
-
           echo "Selecting: $CHOSEN"
           sudo xcode-select -s "$CHOSEN"
           echo "===== active toolchain ====="
@@ -65,6 +47,29 @@ jobs:
 
       - name: Unit tests (offline)
         run: npm run test:offline
+
+      # 修补 Expo 上游 bug：expo-modules-jsi 把 SWIFT_RETURNS_RETAINED
+      # 误加在【构造函数】上。构造函数没有「返回值」这个概念，该标注只对
+      # 工厂函数有意义；类级别已经有正确的 SWIFT_SHARED_REFERENCE，
+      # 所以删掉这两个标注是语义等价的。
+      # Xcode 26.2+ 的 Clang 会把它报成错误：
+      #   'RuntimeScheduler' cannot be annotated with either
+      #   SWIFT_RETURNS_RETAINED or SWIFT_RETURNS_NOT_RETAINED
+      # 已确认上游 58.0.7 仍未修复，故在 CI 内打补丁。
+      - name: Patch expo-modules-jsi (upstream Xcode 26.2+ bug)
+        run: |
+          HDR=node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h
+          echo "===== before ====="
+          grep -n "SWIFT_RETURNS_RETAINED" "$HDR" || echo "(none)"
+          sed -i 's/SWIFT_RETURNS_RETAINED RuntimeScheduler(/RuntimeScheduler(/g' "$HDR"
+          echo "===== after ====="
+          grep -n "SWIFT_RETURNS_RETAINED" "$HDR" || echo "(removed from constructors)"
+          echo "===== sanity checks ====="
+          grep -q "SWIFT_SHARED_REFERENCE" "$HDR" \
+            || { echo "::error::class-level SWIFT_SHARED_REFERENCE was lost"; exit 1; }
+          grep -q "RuntimeScheduler(void \*scheduler, ScheduleFn fn)" "$HDR" \
+            || { echo "::error::scheduler constructor signature changed unexpectedly"; exit 1; }
+          echo "patch OK"
 
       - name: Prebuild iOS project
         run: npx expo prebuild --platform ios --clean
