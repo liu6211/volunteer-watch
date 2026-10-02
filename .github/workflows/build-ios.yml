@@ -12,6 +12,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 关键：macos-15 运行器默认是 Xcode 16.4（Swift 6.1），
+      # 而 Expo 的 ExpoModulesJSI 需要 Swift tools 6.2.0，
+      # 否则报 "package 'apple' is using Swift tools version 6.2.0
+      # but the installed version is 6.1.0"。
+      # 所以必须切到 Xcode 26.x。
+      - name: Select newest Xcode (needs Swift 6.2)
+        run: |
+          echo "===== available Xcodes ====="
+          ls -d /Applications/Xcode*.app || true
+          NEWEST=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$NEWEST" ]; then
+            NEWEST=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+          fi
+          echo "Selecting: $NEWEST"
+          sudo xcode-select -s "$NEWEST"
+          echo "===== active toolchain ====="
+          xcode-select -p
+          xcodebuild -version
+          swift --version
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -22,10 +42,6 @@ jobs:
           sw_vers
           echo "===== xcodebuild -version ====="
           xcodebuild -version
-          echo "===== xcode-select -p ====="
-          xcode-select -p
-          echo "===== installed Xcodes ====="
-          ls /Applications | grep -i xcode || true
           echo "===== node / npm ====="
           node -v
           npm -v
