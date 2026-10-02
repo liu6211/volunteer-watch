@@ -153,9 +153,10 @@ npx eas-cli@latest build --platform android --profile preview
 
 **第一步：云端编译出「未签名包」**
 
-把项目推到 GitHub，然后：
+项目已配好 GitHub Actions 工作流（`.github/workflows/build-ios.yml`），
+推到 GitHub 后会自动触发；也可手动跑：
 仓库页面 → **Actions** → 选 `Build unsigned iOS app` → **Run workflow**。
-跑完在 Artifacts 里下载 `volunteer-watch-unsigned.ipa`（未签名）。
+跑完在 Artifacts 里下载 `volunteer-watch-unsigned-ipa`（未签名 ipa）。
 
 **第二步：本地用你的自签软件签名**
 
@@ -164,16 +165,62 @@ npx eas-cli@latest build --platform android --profile preview
 
 > 如果你更想用 EAS 直接产出已签名的 ipa，可以走：
 > `npx eas-cli@latest build --platform ios --profile preview`
-> 但需要你提供 Apple 证书和描述文件，且设备 UDID 要登记在描述文件里。
+> 但需要**付费** Apple 开发者账号（$99/年）并登记设备 UDID。
+> 走 GitHub Actions + 自签则可以完全不碰 Apple 账号。
 
-### 4.3 出包前要改的东西
+#### ⚠️ iOS 云端编译的三个硬约束（排查花了很久，务必保留）
 
-`app.json` 里这两处现在是占位名，建议改成你自己的：
+这套工作流能跑通，靠的是下面三点同时满足，**缺一个就会失败**：
+
+| # | 约束 | 原因 |
+|---|---|---|
+| 1 | 运行器必须是 **`macos-26`** | `macos-15` 最高只有 Xcode 26.3；expo-modules-jsi 在 26.3 下会因 Swift 严格并发的 `sending ... risks causing data races` 报错。macos-26 默认 Xcode 26.6，可正常编译。 |
+| 2 | 必须切到 **Xcode 26.x** | 运行器默认可能是 16.4（Swift 6.1），而 expo-modules-jsi 的 `Package.swift` 声明 `swift-tools-version: 6.2`，Swift 6.1 直接报 `package 'apple' is using Swift tools version 6.2.0 but the installed version is 6.1.0`。 |
+| 3 | 必须打**一个补丁**（见工作流 `Patch expo-modules-jsi` 步骤） | expo-modules-jsi 把 `SWIFT_RETURNS_RETAINED` 误加在构造函数上，Xcode 26.2+ 的 Clang 会报错。**已确认上游 58.0.7 仍未修复**，所以在 CI 内临时修补。 |
+
+另外两个容易踩的点：
+
+- **不要**把 `swiftLanguageModes` 从 `.v6` 改成 `.v5`。虽然能绕过并发报错，但会禁用
+  Swift 6 的正则字面量语法，导致 `JavaScriptRuntime.swift` 里的
+  `/^[a-zA-Z_$]...$/` 解析失败（`'$' is not a valid digit in integer literal`）。
+- **不要**在 macOS 上用 `sed -i`。BSD sed 要求 `sed -i ''`，否则会把替换脚本
+  当成备份后缀而报错。工作流里统一用 `perl -pi -e`。
+
+#### iOS 后台任务需要的 Info.plist 配置
+
+`expo-background-task` 自带配置插件，但**必须把 `expo-background-task` 列进
+`app.json` 的 `plugins` 才会生效**。否则打包出的 ipa 里
+`UIBackgroundModes` 只有 `fetch`、`BGTaskSchedulerPermittedIdentifiers` 为空，
+后台自动检查在 iOS 上会静默失效。
+
+项目里做了双保险：既列了插件，也在 `app.json` 里显式写了这两项：
 
 ```json
-"ios":     { "bundleIdentifier": "com.yourname.volunteerwatch" },
-"android": { "package":          "com.yourname.volunteerwatch" }
+"ios": {
+  "infoPlist": {
+    "UIBackgroundModes": ["fetch", "processing"],
+    "BGTaskSchedulerPermittedIdentifiers": [
+      "com.expo.modules.backgroundtask.processing"
+    ]
+  }
+}
 ```
+
+打包后可以这样自检（解压 ipa 读 Info.plist）：
+
+```bash
+unzip -o volunteer-watch-unsigned.ipa -d /tmp/ipa
+python3 -c "
+import plistlib, glob
+p = glob.glob('/tmp/ipa/Payload/*.app/Info.plist')[0]
+d = plistlib.load(open(p,'rb'))
+print('bundleId :', d['CFBundleIdentifier'])
+print('bgModes  :', d.get('UIBackgroundModes'))
+print('bgIds    :', d.get('BGTaskSchedulerPermittedIdentifiers'))
+"
+```
+
+### 4.3 出包前的配置（已设置，供参考）
 
 ---
 
