@@ -59,16 +59,30 @@ jobs:
       - name: Patch expo-modules-jsi (upstream Xcode 26.2+ bug)
         run: |
           HDR=node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h
+          if [ ! -f "$HDR" ]; then
+            echo "::error::header not found: $HDR"
+            exit 1
+          fi
+
           echo "===== before ====="
           grep -n "SWIFT_RETURNS_RETAINED" "$HDR" || echo "(none)"
-          sed -i 's/SWIFT_RETURNS_RETAINED RuntimeScheduler(/RuntimeScheduler(/g' "$HDR"
+
+          # 用 perl 而不是 sed -i：macOS 的 BSD sed 要求 `-i ''`，
+          # 直接 `sed -i` 会把替换脚本当成备份后缀而报错。
+          perl -pi -e 's/SWIFT_RETURNS_RETAINED RuntimeScheduler\(/RuntimeScheduler(/g' "$HDR"
+
           echo "===== after ====="
           grep -n "SWIFT_RETURNS_RETAINED" "$HDR" || echo "(removed from constructors)"
+
           echo "===== sanity checks ====="
-          grep -q "SWIFT_SHARED_REFERENCE" "$HDR" \
-            || { echo "::error::class-level SWIFT_SHARED_REFERENCE was lost"; exit 1; }
-          grep -q "RuntimeScheduler(void \*scheduler, ScheduleFn fn)" "$HDR" \
-            || { echo "::error::scheduler constructor signature changed unexpectedly"; exit 1; }
+          if ! grep -q "SWIFT_SHARED_REFERENCE" "$HDR"; then
+            echo "::error::class-level SWIFT_SHARED_REFERENCE was lost"
+            exit 1
+          fi
+          if ! grep -q "RuntimeScheduler(void \*scheduler, ScheduleFn fn)" "$HDR"; then
+            echo "::error::scheduler constructor signature changed unexpectedly"
+            exit 1
+          fi
           echo "patch OK"
 
       - name: Prebuild iOS project
