@@ -430,7 +430,31 @@ function firstLink(html) {
 /* ------------------------------------------------------------ 我的项目 */
 
 /**
- * @returns {{items: Array<{name,url,org,joinedAt,status,post,hours}>}}
+ * 从「操作」单元格里解析出可用的动作。
+ *
+ * 站点用 onclick 调用，例如（用户实际页面里的原文）：
+ *   <a onclick="del_opp_vol(9711966,1);">删除</a>          ← 取消报名
+ *   <a onclick="change_group_div(9711966,1);">更换岗位</a>
+ *   <a onclick="show_add_score(9710047,0);">评价</a>
+ *   <a onclick="show_apply_hour(9710047);">申请时长</a>
+ *
+ * 「删除」只在【报名后、还没被录取之前】出现，所以它就是取消报名。
+ */
+function parseActions(cellHtml) {
+  const out = [];
+  const re = /onclick\s*=\s*["']\s*(\w+)\s*\(([^)]*)\)\s*;?\s*["'][^>]*>([\s\S]{0,20}?)<\/a>/gi;
+  for (const m of String(cellHtml ?? '').matchAll(re)) {
+    out.push({
+      fn: m[1],
+      args: m[2].split(',').map((s) => s.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean),
+      label: textOf(m[3]),
+    });
+  }
+  return out;
+}
+
+/**
+ * @returns {{items: Array<{name,url,org,joinedAt,status,post,hours,oppId,actions}>}}
  */
 export function parseMyProjects(html) {
   const items = [];
@@ -438,6 +462,11 @@ export function parseMyProjects(html) {
     const link = firstLink(tds[0]);
     if (!link.text) continue;
     const orgM = tds[0].match(/项目团体[：:]\s*([^<\s][^<]*)/);
+
+    const actions = parseActions(tds[5] || '');
+    // 各动作的第一个参数就是「报名记录编号」
+    const oppId = actions.find((a) => a.args.length)?.args[0] || '';
+
     items.push({
       name: link.text,
       url: link.url,
@@ -446,9 +475,132 @@ export function parseMyProjects(html) {
       status: textOf(tds[2] || ''),
       post: textOf(tds[3] || ''),
       hours: textOf(tds[4] || ''),
+      oppId,
+      actions,
     });
   }
   return { items };
+}
+
+/* ------------------------------------------------------------ 取消报名 */
+
+/**
+ * 取消报名（站点里叫「删除」，只在报名后未被录取前出现）。
+ *
+ * ⚠️ 这是【写操作】，所以设计上做了两重保险：
+ *   1. 绝不根据服务器返回的文案判断成功 —— 站点这个接口的文案不可靠。
+ *   2. 请求完【重新拉一次「我的项目」】，确认那条报名记录真的消失了，
+ *      才认为成功。即使接口名或参数不对，App 也只会如实报告失败，
+ *      不会骗用户说「已取消」。
+ *
+ * 接口名来自站点 JS 的命名规律：
+ *   opp_join() 函数  →  /app/api/view.php?m=opp_join
+ *   del_opp_vol() 函数 →  /app/api/view.php?m=del_opp_vol（据此推断）
+ *
+ * @param {{cookie:string,seid:string,cookieMode?:string}} session
+ * @param {string} host
+ * @param {string} oppId 报名记录编号（页面 onclick 的第一个参数）
+ * @param {string} type  第二个参数，页面里是 1
+ */
+export async function cancelApplication(session, host, oppId, type = '1', opts = {}) {
+  if (!session || !session.cookie) {
+    return { ok: false, message: '请先登录志愿云账号' };
+  }
+  if (!oppId) {
+    return { ok: false, message: '缺少报名记录编号' };
+  }
+
+  // 1. 删除前先记下「这条还在」
+  let before = null;
+  try {
+    const r = await fetchMyProjects(session, host);
+    before = r.items.some((it) => String(it.oppId) === String(oppId));
+  } catch {
+    // 取不到就先继续，后面靠删除后的校验兜底
+  }
+
+  // 2. 发删除请求
+  //    接口实测自 https://css.zhiyuanyun.com/common/opp.my.vol.js：
+  //      $.post('opp.my.php?m=del_opp_vol', {status, opp_id}, ...)
+  //    注意不是 /app/api/view.php —— 之前那个是猜的，猜错了。
+  const doFetch = opts.fetchImpl || fetch;
+  const url = `${origin(host)}/app/opp/opp.my.php?m=del_opp_vol`;
+  const body = new URLSearchParams({ status: String(type), opp_id: String(oppId) });
+
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), opts.timeoutMs ?? REQUEST_TIMEOUT_MS);
+  let raw = '';
+  try {
+    const res = await doFetch(url, {
+      method: 'POST',
+      headers: {
+        'User-Agent': UA,
+        'Accept-Language': 'zh-CN,zh;q=0.9',
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+        Referer: `${origin(host)}/app/opp/opp.my.php`,
+        ...(session.cookieMode === 'platform' ? {} : { Cookie: session.cookie }),
+      },
+      body: body.toString(),
+      credentials: session.cookieMode === 'platform' ? 'include' : 'omit',
+      signal: ac.signal,
+      redirect: 'follow',
+    });
+    raw = await res.text();
+  } catch (e) {
+    if ((e && e.name === 'AbortError') || /aborted|timeout/i.test(String(e && e.message))) {
+      throw new Error('取消报名请求超时，请检查网络后重试');
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+
+  let serverMsg = '';
+  let serverOk = false;
+  try {
+    const o = JSON.parse(raw);
+    serverMsg = String(o.msg || '');
+    // 站点这个接口 code==0 表示成功（实测自 opp.my.vol.js 里的判断）
+    serverOk = String(o.code) === '0';
+  } catch {
+    serverMsg = textOf(raw).slice(0, 100);
+  }
+
+  // 3. 关键：重新拉列表，用【实际结果】判断成败
+  try {
+    const after = await fetchMyProjects(session, host);
+    const still = after.items.some((it) => String(it.oppId) === String(oppId));
+
+    if (!still) {
+      return { ok: true, message: '已取消报名' };
+    }
+    if (before === false) {
+      // 本来就不在列表里（可能已经被处理过）
+      return { ok: true, message: '这条报名记录已经不在了' };
+    }
+    // 记录还在 = 没成功。优先用服务器原话，没有就如实说明
+    return {
+      ok: false,
+      message: serverMsg && !serverOk
+        ? `取消报名没有生效：${serverMsg}`
+        : '取消报名没有生效，报名记录还在。请到网站操作。',
+    };
+  } catch {
+    /*
+     * 校验不了（网络问题/取列表失败）就如实说，绝不谎报成功。
+     * 服务器说成功但没验证到的情况，也要讲清楚。
+     */
+    if (serverOk) {
+      return { ok: true, message: '服务器已接受取消请求，请刷新「我的项目」确认' };
+    }
+    return {
+      ok: false,
+      message: serverMsg
+        ? `服务器返回：${serverMsg}（未能确认结果，请刷新「我的项目」看看）`
+        : '请求已发出，但没能确认结果。请刷新「我的项目」查看。',
+    };
+  }
 }
 
 /* ------------------------------------------------------------ 我的团体 */

@@ -5,12 +5,14 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View,
+  ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, View,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { fetchMyProjects, fetchMyOrgs, fetchMyHours, ACCOUNT_FEATURES } from '../core/account.mjs';
+import {
+  fetchMyProjects, fetchMyOrgs, fetchMyHours, ACCOUNT_FEATURES, cancelApplication,
+} from '../core/account.mjs';
 import { SEARCH_HOST } from '../core/search.mjs';
 import { useStore } from '../lib/store';
 import { colors, radius as R, spacing, themedStyles } from '../lib/theme';
@@ -42,6 +44,8 @@ export default function AccountScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [expired, setExpired] = useState(false);
+  /** 正在取消报名的报名记录编号 */
+  const [canceling, setCanceling] = useState('');
 
   const load = useCallback(
     async (which: Tab, isRefresh = false) => {
@@ -107,6 +111,41 @@ export default function AccountScreen() {
     setTab(t);
     const has = t === 'projects' ? data.projects : t === 'orgs' ? data.orgs : data.hours;
     if (!has) void load(t);
+  };
+
+  /**
+   * 取消报名（站点里叫「删除」，只在报名后未录用前出现）。
+   * 写操作 → 二次确认；结束后重新拉列表，用真实结果说话。
+   */
+  const onCancelApply = (item: { name: string; oppId: string; actions: { fn: string; args: string[] }[] }) => {
+    const act = item.actions.find((a) => a.fn === 'del_opp_vol');
+    if (!act) return;
+    const status = act.args[1] || '1';   // 1=删除 2=拒绝 3=脱离
+
+    Alert.alert(
+      '取消报名',
+      `确定取消「${item.name}」的报名吗？\n\n取消后需要重新报名。`,
+      [
+        { text: '再想想', style: 'cancel' },
+        {
+          text: '确定取消',
+          style: 'destructive',
+          onPress: async () => {
+            setCanceling(item.oppId);
+            try {
+              await autoLogin().catch(() => undefined);
+              const r = await cancelApplication(accountSession(), SEARCH_HOST, item.oppId, status);
+              Alert.alert(r.ok ? '已取消' : '取消失败', r.message);
+              if (r.ok) await load('projects');
+            } catch (e) {
+              Alert.alert('取消出错', (e as Error).message);
+            } finally {
+              setCanceling('');
+            }
+          },
+        },
+      ]
+    );
   };
 
   /* ------------------------------------------------ 未登录 */
@@ -420,6 +459,15 @@ const styles = themedStyles(() => StyleSheet.create({
   loadingText: { fontSize: 12, color: colors.textDim },
 
   itemCard: { marginBottom: spacing.sm },
+
+  actRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.md },
+  actBtnDanger: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: spacing.md, paddingVertical: 7,
+    borderRadius: R.pill, backgroundColor: colors.dangerDim,
+  },
+  actBtnDangerText: { fontSize: 12, fontWeight: '700', color: colors.danger },
+  actHint: { flex: 1, fontSize: 10.5, color: colors.textFaint },
 
   featureCard: { marginBottom: spacing.sm },
   featureRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },

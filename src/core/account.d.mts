@@ -5,6 +5,15 @@ export interface AccountSessionState {
   seid: string;
 }
 
+export interface MyProjectAction {
+  /** 站点 onclick 里的函数名，如 del_opp_vol */
+  fn: string;
+  /** 函数参数，第一个通常是报名记录编号 */
+  args: string[];
+  /** 按钮文字，如「删除」「更换岗位」 */
+  label: string;
+}
+
 export interface MyProject {
   name: string;
   url: string;
@@ -13,6 +22,10 @@ export interface MyProject {
   status: string;
   post: string;
   hours: string;
+  /** 报名记录编号（onclick 的第一个参数） */
+  oppId: string;
+  /** 该行可用的操作 */
+  actions: MyProjectAction[];
 }
 
 export interface MyOrg {
@@ -105,6 +118,18 @@ export function fetchCard(
 export function certUrl(host: string): string;
 
 export function parseMyProjects(html: string): { items: MyProject[] };
+
+/**
+ * 取消报名（站点里叫「删除」）。
+ * 会用「重新拉一次我的项目」验证真实结果，不轻信服务器文案。
+ */
+export function cancelApplication(
+  session: AccountSessionState,
+  host: string,
+  oppId: string,
+  type?: string,
+  opts?: { fetchImpl?: typeof fetch; timeoutMs?: number }
+): Promise<{ ok: boolean; message: string }>;
 export function parseMyOrgs(html: string): { items: MyOrg[] };
 export function parseMyHours(html: string): MyHoursResult;
 
