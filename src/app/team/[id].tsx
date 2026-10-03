@@ -262,7 +262,7 @@ const styles = themedStyles(() => StyleSheet.create({
     paddingVertical: spacing.sm,
     borderRadius: R.pill,
   },
-  smallBtnGhost: { backgroundColor: 'rgba(255,255,255,0.6)' },
+  smallBtnGhost: { backgroundColor: colors.field },
   smallBtnText: { color: colors.textOnAccent, fontSize: 12.5, fontWeight: '700' },
 
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
@@ -274,7 +274,7 @@ const styles = themedStyles(() => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: spacing.lg,
-    backgroundColor: 'rgba(255,255,255,0.5)',
+    backgroundColor: colors.field,
     borderRadius: R.sm,
     padding: spacing.md,
   },
@@ -310,7 +310,7 @@ const styles = themedStyles(() => StyleSheet.create({
   projRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   projIndex: {
     width: 24, height: 24, borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.6)',
+    backgroundColor: colors.field,
     alignItems: 'center', justifyContent: 'center',
   },
   projIndexText: { fontSize: 11, color: colors.textDim, fontWeight: '800' },

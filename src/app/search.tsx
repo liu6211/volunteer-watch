@@ -255,7 +255,8 @@ const styles = themedStyles(() => StyleSheet.create({
   chip: {
     paddingHorizontal: spacing.md, paddingVertical: 6,
     borderRadius: R.pill,
-    backgroundColor: 'rgba(255,255,255,0.55)',
+    // 用主题色而不是写死的白色：深色模式下写死白色会变成「浅底浅字」看不清
+    backgroundColor: colors.field,
     borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.glassBorder,
   },
   chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },

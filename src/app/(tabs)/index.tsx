@@ -255,7 +255,7 @@ const styles = themedStyles(() => StyleSheet.create({
 
   latestBox: {
     marginTop: spacing.md,
-    backgroundColor: 'rgba(255,255,255,0.5)',
+    backgroundColor: colors.field,
     borderRadius: R.sm,
     padding: spacing.md,
     borderWidth: StyleSheet.hairlineWidth,

@@ -487,7 +487,7 @@ const styles = themedStyles(() => StyleSheet.create({
   chip: {
     paddingHorizontal: spacing.md, paddingVertical: 7,
     borderRadius: R.pill,
-    backgroundColor: 'rgba(255,255,255,0.55)',
+    backgroundColor: colors.field,
     borderWidth: StyleSheet.hairlineWidth * 2,
     borderColor: colors.glassBorder,
   },
