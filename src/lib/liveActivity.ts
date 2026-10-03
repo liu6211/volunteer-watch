@@ -73,7 +73,7 @@ export async function startShiftActivity(
 ): Promise<{ ok: boolean; message: string; skipped?: boolean }> {
   const mod = loadModule();
   if (!mod) {
-    return { ok: false, skipped: true, message: '当前环境不支持实时活动（Expo Go 或非 iOS）' };
+    return { ok: false, skipped: true, message: '当前环境暂不支持实时活动' };
   }
 
   const props: ShiftActivityProps = {

@@ -71,7 +71,7 @@ export function validateMailConfig(cfg: MailConfig): MailResult {
   if (!st) {
     return {
       ok: false,
-      reason: '当前是 Expo Go，没有 socket 能力；装上正式版 App 才能发信',
+      reason: '当前环境暂不支持直接发信',
     };
   }
   return { ok: true };

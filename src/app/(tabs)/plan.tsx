@@ -219,9 +219,7 @@ export default function PlanScreen() {
             <View style={styles.noteRow}>
               <Icon name="phone-portrait-outline" size={15} color={colors.primary} />
               <Text style={styles.noteText}>
-                {liveNote || (isLiveActivityAvailable()
-                  ? '实时活动已就绪：服务期间可在锁屏和灵动岛看剩余时间'
-                  : '当前环境不支持上岛（Expo Go 或非 iOS），需要 development build')}
+                {liveNote || '实时活动已就绪'}
               </Text>
             </View>
             {targetShift ? (

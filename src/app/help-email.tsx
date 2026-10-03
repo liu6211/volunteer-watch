@@ -116,7 +116,7 @@ export default function HelpEmailScreen() {
           <View style={styles.errRow}>
             <Text style={styles.errTitle}>提示不支持发邮件</Text>
             <Text style={styles.errText}>
-              说明你现在用的是 Expo Go。装上正式版 App 就能发了。
+
             </Text>
           </View>
           <View style={styles.errRow}>

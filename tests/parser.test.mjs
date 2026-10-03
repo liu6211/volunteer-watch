@@ -18,7 +18,7 @@ import {
 import {
   parseOrgPage, parseProjects, parseOrgName, parseOrgId, validateOrgPage,
   detectCharset, decodeEntities, findNewProjects, parseLooseDate,
-  buildNotificationText,
+  buildNotificationText, fetchOrgSnapshot,
 } from '../src/core/parser.mjs';
 import { fingerprintOf, toCounts, findNewByCounts } from '../src/core/fingerprint.mjs';
 
@@ -353,4 +353,51 @@ test('端到端：项目全部 id 变化后重复抓取，不会误报', () => {
   const snap = parseOrgPage(FIXTURE, { host: 'gz.zhiyuanyun.com' });
   const shuffledIds = snap.projects.map((p, i) => ({ ...p, id: 'CHANGED' + i }));
   assert.deepEqual(findNewProjects(shuffledIds, snap.counts), []);
+});
+
+/* ------------------------------------------------ 翻页 */
+
+test('fetchOrgSnapshot: 会翻页抓全，不只拿第一页', async () => {
+  /*
+   * 团体页里的项目列表是 AJAX 加载的，且每页只有 20 条。
+   * 原来只解析页面本身、不调 get_opps，会漏掉绝大部分项目
+   * （实测某团体从 20 个 → 399 个）。
+   */
+  // 团体页用真实样本（validateOrgPage 对结构有要求），
+  // 只把 get_opps 的返回换成分页数据
+  const orgPage = FIXTURE;
+
+  const mkPage = (n, from) => {
+    const rows = Array.from({ length: n }, (_, i) => {
+      const id = from + i;
+      return `<tr><td><a href="/app/opp/view.php?id=p${id}" target="_blank">分页项目${id}</a></td>`
+        + `<td>2026-01-0${(id % 9) + 1}</td><td>运行中</td></tr>`;
+    }).join('');
+    // 分页控件里带上 p=N，让 hasNext 能判断
+    return `<table class="table1"><tr><th>项目名称</th></tr>${rows}</table>`
+      + `<div class="pagebar">${n ? `<a href="?p=${from + 1}">下一页</a>` : ''}</div>`;
+  };
+
+  const urls = [];
+  const fake = async (url) => {
+    const u = String(url);
+    urls.push(u);
+    let body = orgPage;
+    const m = u.match(/m=get_opps&type=2&id=(\d+)&p=(\d+)/);
+    if (m) body = m[2] === '1' ? mkPage(20, 500) : m[2] === '2' ? mkPage(5, 900) : '';
+    return {
+      ok: true, status: 200,
+      headers: { get: () => 'text/html; charset=utf-8' },
+      arrayBuffer: async () => new TextEncoder().encode(body).buffer,
+    };
+  };
+
+  const snap = await fetchOrgSnapshot('https://gz.zhiyuanyun.com/app/org/view.php?id=abc', { fetchImpl: fake });
+
+  // 真实样本自身有项目，所以断言「多抓到了分页项目」而不是绝对数量
+  const paged = snap.projects.filter((p) => /^分页项目/.test(p.name));
+  assert.equal(paged.length, 25, '应把两页分页项目合并（20 + 5）');
+  assert.ok(urls.some((u) => /m=get_opps/.test(u)), '必须调 get_opps 接口');
+  assert.ok(urls.some((u) => /[?&]p=2/.test(u)), '必须抓到第 2 页');
+  assert.deepEqual(snap.pageErrors || [], [], '不应该有抓页错误');
 });

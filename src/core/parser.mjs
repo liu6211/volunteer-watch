@@ -248,7 +248,20 @@ export function parseOrgName(html) {
  * @param {string} html
  */
 export function parseOrgId(html) {
-  const m = String(html).match(/org_join\(\s*(\d+)/);
+  const s = String(html);
+
+  /*
+   * ⚠️ 优先取标题里的【数字】：
+   *   <h1 class="l">【32702119】&nbsp;都匀三中</h1>
+   * 这个才是团体编号，也正是 get_opps 接口要的参数。
+   *
+   * 不能优先用 org_join(数字)：那是加入团体用的另一个编号，
+   * 拿错就会让「发起的项目」接口返回空表。
+   */
+  const title = s.match(/<h[12][^>]*>[\s\S]{0,80}?【\s*(\d{4,})\s*】/);
+  if (title) return title[1];
+
+  const m = s.match(/org_join\(\s*(\d{4,})/);
   return m ? m[1] : '';
 }
 
@@ -336,16 +349,70 @@ function absoluteUrl(href, host) {
  * @param {{ host?: string, timeoutMs?: number, fetchImpl?: typeof fetch }} [opts]
  * @returns {Promise<OrgSnapshot>}
  */
+/**
+ * 抓「发起的项目」的某一页。
+ *
+ * ⚠️ 团体页里的项目列表是【AJAX 加载】的（con2 区块初始为空），
+ * 所以只抓页面本身永远拿不到项目，更拿不到第 2 页以后。
+ * 站点自己的调用是：
+ *   get_opps(type, id, p) → /app/api/view.php?m=get_opps&type=&id=&p=
+ * 实测【type=2 + 数字团体编号】才返回「发起的项目」，每页 20 条。
+ *
+ * @returns {Promise<{items: OppItem[], hasNext: boolean}>}
+ */
+async function fetchOppsPage(host, orgId, page, opts = {}) {
+  const doFetch = opts.fetchImpl || fetch;
+  // 注意：parser.mjs 里没有 origin() 辅助函数，这里直接拼，
+  // 之前误用 origin(host) 导致每页都抛 ReferenceError 被吞掉。
+  const base = host.startsWith('http') ? host : `https://${host}`;
+  const url = `${base}/app/api/view.php?m=get_opps&type=2&id=${encodeURIComponent(orgId)}&p=${page}`;
+
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), opts.timeoutMs ?? 20000);
+  try {
+    const res = await doFetch(url, {
+      headers: { ...DEFAULT_HEADERS, 'X-Requested-With': 'XMLHttpRequest' },
+      signal: ac.signal,
+      redirect: 'follow',
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const buf = new Uint8Array(await res.arrayBuffer());
+    const charset = detectCharset(res.headers.get('content-type'), buf);
+    const html = decodeHtml(buf, charset);
+
+    const items = parseProjects(html, host);
+
+    // 分页控件里出现的最大页码；没有控件就按「满 20 条」推断可能还有下一页
+    const pages = [...html.matchAll(/[?&]p=(\d+)/g)].map((m) => Number(m[1]));
+    const maxPage = pages.length ? Math.max(...pages) : page;
+    const hasNext = maxPage > page || items.length >= 20;
+
+    return { items, hasNext };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * 抓一个团体的完整快照。
+ *
+ * 先取团体页拿到名称/编号，再【逐页】拉「发起的项目」——
+ * 站点每页只有 20 条，只取第一页会漏掉大量项目。
+ */
 export async function fetchOrgSnapshot(url, opts = {}) {
   const host = opts.host || (() => {
     try { return new URL(url).hostname; } catch { return 'gz.zhiyuanyun.com'; }
   })();
   const timeoutMs = opts.timeoutMs ?? 20000;
   const doFetch = opts.fetchImpl || fetch;
+  /** 最多抓多少页，防止站点分页异常时无限循环 */
+  const maxPages = Math.max(1, Math.min(50, Number(opts.maxPages) || 20));
 
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), timeoutMs);
 
+  let page;
   try {
     const res = await doFetch(url, { headers: DEFAULT_HEADERS, signal: ac.signal, redirect: 'follow' });
     if (!res.ok) {
@@ -355,10 +422,62 @@ export async function fetchOrgSnapshot(url, opts = {}) {
     const charset = detectCharset(res.headers.get('content-type'), buf);
     const html = decodeHtml(buf, charset);
 
-    return parseOrgPage(html, { host });
+    page = parseOrgPage(html, { host });
   } finally {
     clearTimeout(timer);
   }
+
+  const orgId = page.orgId;
+  if (!orgId) return page;
+
+  /*
+   * 逐页补全。
+   *
+   * ⚠️ 不能「这一页没有新增就停止」：团体页本身往往已经嵌了第 1 页的
+   * 20 个项目，于是抓第 1 页时新增为 0，会立刻 break、永远拿不到第 2 页。
+   * 所以只在【没有下一页】或【连续两页都无新增】时才停。
+   */
+  const seen = new Set(page.projects.map((p) => p.fingerprint));
+  const all = [...page.projects];
+  let emptyStreak = 0;
+  /** 抓页过程中的错误（只记录，不影响整体判定） */
+  const pageErrors = [];
+
+  for (let p = 1; p <= maxPages; p++) {
+    let r;
+    try {
+      r = await fetchOppsPage(host, orgId, p, { ...opts, timeoutMs });
+    } catch (e) {
+      /*
+       * 某一页失败就停下，已拿到的照常用（不要把整次检查判为失败）。
+       * 但错误要记下来 —— 之前这里直接 break 把 ReferenceError 吞了，
+       * 结果「只抓到 20 个」查了很久。
+       */
+      pageErrors.push(`第 ${p} 页: ${(e && e.message) || e}`);
+      break;
+    }
+    if (!r.items.length) break;
+
+    let added = 0;
+    for (const it of r.items) {
+      if (seen.has(it.fingerprint)) continue;
+      seen.add(it.fingerprint);
+      all.push(it);
+      added++;
+    }
+
+    emptyStreak = added === 0 ? emptyStreak + 1 : 0;
+    // 没有下一页，或连续两页都是重复内容 → 收工
+    if (!r.hasNext || emptyStreak >= 2) break;
+  }
+
+  return {
+    ...page,
+    projects: all,
+    projectIds: all.map((p) => p.id),
+    counts: toCounts(all),
+    pageErrors,
+  };
 }
 
 /* ------------------------------------------------ 兼容旧 API 的差集函数 */

@@ -33,7 +33,7 @@ async function rnConnect({ host, port, tls }: { host: string; port: number; tls:
     mod = require('react-native-tcp-socket');
   } catch {
     throw new Error(
-      '当前环境不支持直接发邮件（Expo Go 没有 socket 能力）。\n' +
+      '当前环境暂不支持直接发邮件。\n' +
       '装上正式版 App 后即可使用。'
     );
   }

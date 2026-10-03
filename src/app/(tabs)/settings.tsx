@@ -427,7 +427,7 @@ export default function SettingsScreen() {
             <Row
               icon="phone-portrait-outline"
               title="上岛（灵动岛 / 锁屏倒计时）"
-              subtitle="服务期间在锁屏和灵动岛显示剩余时间。iOS 独占，Expo Go 里不生效"
+              subtitle="服务期间在锁屏和灵动岛显示剩余时间"
               right={
                 <Switch
                   value={s.liveActivityEnabled}
@@ -436,13 +436,6 @@ export default function SettingsScreen() {
                 />
               }
             />
-            <Divider inset={64} />
-            <Text style={styles.hint}>
-              实时活动用官方 expo-widgets 实现（无需原生代码）。
-              它只在 iOS 生效，且【Expo Go 里一定不行】——
-              必须用 development build 或正式包，重新安装后才看得到。
-              关掉这个开关不影响服务提醒，提醒走的是普通通知。
-            </Text>
           </Glass>
         </>
       ) : null}
@@ -567,17 +560,6 @@ export default function SettingsScreen() {
             keyboardType="email-address"
           />
         </View>
-
-        {/* Expo Go 里发不了，这里明确说清楚免得用户白折腾 */}
-        {!mailCheck.ok && /Expo Go/.test(mailCheck.reason || '') ? (
-          <View style={styles.mailWarn}>
-            <Icon name="information-circle-outline" size={15} color={colors.warn} />
-            <Text style={styles.mailWarnText}>
-              发邮件需要 socket 能力，Expo Go 里没有。{'\n'}
-              配置会保存下来，装上正式版 App 后自动生效。
-            </Text>
-          </View>
-        ) : null}
 
         <View style={styles.testWrap}>
           <GlassButton
