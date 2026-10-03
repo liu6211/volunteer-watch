@@ -57,8 +57,19 @@ export function parseProjects(html: string, host?: string): OppItem[];
 
 export function fetchOrgSnapshot(
   url: string,
-  opts?: { host?: string; timeoutMs?: number; fetchImpl?: typeof fetch }
+  opts?: { host?: string; timeoutMs?: number; fetchImpl?: typeof fetch; maxPages?: number }
 ): Promise<OrgSnapshot>;
+
+/**
+ * 抓「发起的项目」的某一页（站点每页 20 条）。
+ * 项目列表页用它做翻页；监控默认只取第 1 页（新项目总在最前面）。
+ */
+export function fetchOppsPage(
+  host: string,
+  orgId: string,
+  page: number,
+  opts?: { timeoutMs?: number; fetchImpl?: typeof fetch }
+): Promise<{ items: OppItem[]; hasNext: boolean }>;
 
 export function findNewProjects(
   current: OppItem[],

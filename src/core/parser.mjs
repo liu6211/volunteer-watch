@@ -360,8 +360,7 @@ function absoluteUrl(href, host) {
  *
  * @returns {Promise<{items: OppItem[], hasNext: boolean}>}
  */
-async function fetchOppsPage(host, orgId, page, opts = {}) {
-  const doFetch = opts.fetchImpl || fetch;
+export async function fetchOppsPage(host, orgId, page, opts = {}) {  const doFetch = opts.fetchImpl || fetch;
   // 注意：parser.mjs 里没有 origin() 辅助函数，这里直接拼，
   // 之前误用 origin(host) 导致每页都抛 ReferenceError 被吞掉。
   const base = host.startsWith('http') ? host : `https://${host}`;
@@ -406,8 +405,14 @@ export async function fetchOrgSnapshot(url, opts = {}) {
   })();
   const timeoutMs = opts.timeoutMs ?? 20000;
   const doFetch = opts.fetchImpl || fetch;
-  /** 最多抓多少页，防止站点分页异常时无限循环 */
-  const maxPages = Math.max(1, Math.min(50, Number(opts.maxPages) || 20));
+  /*
+   * 默认【只抓第 1 页】。
+   *
+   * 站点列表按发布日期倒序，新项目一定出现在最前面，所以监控第 1 页就够；
+   * 一次把几百个项目全拉下来没必要（用户明确要求按页来）。
+   * 需要更多页时传 opts.maxPages，或用 fetchOppsPage 逐页取。
+   */
+  const maxPages = Math.max(1, Math.min(50, Number(opts.maxPages) || 1));
 
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), timeoutMs);

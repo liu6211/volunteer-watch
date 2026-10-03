@@ -5,7 +5,7 @@
  * 如果是通过链接直接打开（栈里没有上一页），则显示一个「返回列表」按钮，
  * 保证任何情况下都不会「卡在这一页出不去」。
  */
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator, Alert, FlatList, Linking, StyleSheet, Text, TextInput, View,
 } from 'react-native';
@@ -16,6 +16,7 @@ import { useStore, displayName } from '../../lib/store';
 import { colors, radius as R, spacing, timeAgo, statusColor } from '../../lib/theme';
 import { themedStyles } from '../../lib/theme';
 import type { OppItem } from '../../lib/types';
+import { fetchOppsPage } from '../../core/parser.mjs';
 import { Backdrop, Badge, Divider, Glass, GlassButton, Icon, Tap } from '../../components/ui';
 
 export default function TeamDetailScreen() {
@@ -28,6 +29,47 @@ export default function TeamDetailScreen() {
 
   const [editing, setEditing] = useState(false);
   const [alias, setAlias] = useState('');
+
+  /* ------------------------------------------------ 翻页浏览 */
+  /**
+   * 站点每页 20 个。第 1 页用已抓到的本地数据（秒开），
+   * 之后按页去站点取 —— 照站点自己的分页方式，不一次性全拉。
+   */
+  const [page, setPage] = useState(1);
+  const [pageItems, setPageItems] = useState<OppItem[]>([]);
+  const [hasNext, setHasNext] = useState(true);
+  const [paging, setPaging] = useState(false);
+  const [pageError, setPageError] = useState('');
+
+  /** 注意：hook 要在下面的提前 return 之前，否则会违反 hooks 规则 */
+  const loadPage = useCallback(
+    async (target: number) => {
+      if (target < 1) return;
+      setPageError('');
+      if (target === 1) {
+        // 第 1 页直接用本地已抓到的，不用再请求
+        setPage(1);
+        return;
+      }
+      setPaging(true);
+      try {
+        const orgId = watch?.orgId || '';
+        if (!orgId) throw new Error('这个团体还没有编号，先点「立即检查」');
+        const r = await fetchOppsPage(watch!.host, orgId, target);
+        setPageItems(r.items);
+        setHasNext(r.hasNext);
+        setPage(target);
+      } catch (e) {
+        setPageError((e as Error).message);
+      } finally {
+        setPaging(false);
+      }
+    },
+    [watch]
+  );
+
+  /** 当前这一页要显示什么 */
+  const listData = page === 1 ? (watch?.projects ?? []) : pageItems;
 
   /** 栈里没有上一页时（直接打开链接），需要自己给一个出口 */
   const canGoBack = router.canGoBack();
@@ -120,7 +162,7 @@ export default function TeamDetailScreen() {
       <Stack.Screen options={{ title: displayName(watch) }} />
 
       <FlatList
-        data={watch.projects}
+        data={listData}
         keyExtractor={(p, i) => `${p.name}-${p.date}-${i}`}
         renderItem={renderProject}
         contentContainerStyle={[
@@ -230,9 +272,44 @@ export default function TeamDetailScreen() {
 
             <View style={styles.listTitleRow}>
               <Icon name="list-outline" size={15} color={colors.textDim} />
-              <Text style={styles.listTitle}>已抓到的项目</Text>
-              <Badge text={String(watch.projects.length)} tone="neutral" />
+              <Text style={styles.listTitle}>
+                {page === 1 ? '最新 20 个（第 1 页）' : `第 ${page} 页`}
+              </Text>
+              <Badge text={String(listData.length)} tone="neutral" />
             </View>
+
+            {/* 翻页：照站点自己的分页方式，每页 20 个 */}
+            <View style={styles.pager}>
+              <GlassButton
+                label="上一页" icon="chevron-back" variant="glass"
+                disabled={page <= 1 || paging}
+                onPress={() => { void loadPage(page - 1); }}
+                style={{ flex: 1 }}
+              />
+              <View style={styles.pageNo}>
+                <Text style={styles.pageNoText}>{page}</Text>
+              </View>
+              <GlassButton
+                label="下一页" icon="chevron-forward" variant="glass"
+                disabled={!hasNext || paging}
+                onPress={() => { void loadPage(page + 1); }}
+                style={{ flex: 1 }}
+              />
+            </View>
+
+            {paging ? (
+              <View style={styles.pagingRow}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={styles.pagingText}>正在读取第 {page + 1} 页…</Text>
+              </View>
+            ) : null}
+
+            {pageError ? (
+              <View style={styles.pagingRow}>
+                <Icon name="alert-circle" size={14} color={colors.danger} />
+                <Text style={styles.pageErrText}>{pageError}</Text>
+              </View>
+            ) : null}
           </View>
         }
         ListEmptyComponent={
@@ -309,6 +386,22 @@ const styles = themedStyles(() => StyleSheet.create({
   lastResult: { flex: 1, fontSize: 11.5, color: colors.textDim },
 
   actions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
+
+  pager: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    marginTop: spacing.md, marginBottom: spacing.sm,
+  },
+  pageNo: {
+    minWidth: 52, alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 10, borderRadius: R.pill, backgroundColor: colors.primary,
+  },
+  pageNoText: { fontSize: 14, fontWeight: '800', color: colors.textOnAccent },
+  pagingRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    paddingVertical: spacing.sm, paddingHorizontal: spacing.xs,
+  },
+  pagingText: { fontSize: 12, color: colors.textDim },
+  pageErrText: { flex: 1, fontSize: 12, color: colors.danger },
 
   listTitleRow: {
     flexDirection: 'row', alignItems: 'center', gap: 6,

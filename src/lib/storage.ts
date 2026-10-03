@@ -183,11 +183,13 @@ export function makeWatch(params: {
  */
 export function applySnapshotToWatch(
   watch: WatchItem,
-  snapshot: { orgName: string; projects: OppItem[]; counts: CountTable },
+  snapshot: { orgId?: string; orgName: string; projects: OppItem[]; counts: CountTable },
   lastResult: string
 ): WatchItem {
   return {
     ...watch,
+    // 存下站点给的数字团体编号：翻页浏览「发起的项目」要用它调 get_opps
+    orgId: snapshot.orgId || watch.orgId,
     name: snapshot.orgName || watch.name,
     knownCounts: snapshot.counts,
     projects: snapshot.projects,

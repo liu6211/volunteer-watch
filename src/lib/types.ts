@@ -29,6 +29,12 @@ export interface WatchItem {
   enabled: boolean;
   /** 上次检查时间（ISO） */
   lastCheckedAt?: string;
+  /**
+   * 站点给的【数字团体编号】（如 6385777）。
+   * 翻页浏览「发起的项目」要用它调 get_opps 接口 ——
+   * 注意它和上面的 id（链接里的加密 id）不是一回事。
+   */
+  orgId?: string;
   /** 上次检查结果说明（成功/失败原因） */
   lastResult?: string;
   /**

@@ -392,7 +392,10 @@ test('fetchOrgSnapshot: 会翻页抓全，不只拿第一页', async () => {
     };
   };
 
-  const snap = await fetchOrgSnapshot('https://gz.zhiyuanyun.com/app/org/view.php?id=abc', { fetchImpl: fake });
+  const snap = await fetchOrgSnapshot('https://gz.zhiyuanyun.com/app/org/view.php?id=abc', {
+    fetchImpl: fake,
+    maxPages: 3,
+  });
 
   // 真实样本自身有项目，所以断言「多抓到了分页项目」而不是绝对数量
   const paged = snap.projects.filter((p) => /^分页项目/.test(p.name));
@@ -400,4 +403,28 @@ test('fetchOrgSnapshot: 会翻页抓全，不只拿第一页', async () => {
   assert.ok(urls.some((u) => /m=get_opps/.test(u)), '必须调 get_opps 接口');
   assert.ok(urls.some((u) => /[?&]p=2/.test(u)), '必须抓到第 2 页');
   assert.deepEqual(snap.pageErrors || [], [], '不应该有抓页错误');
+});
+
+test('fetchOrgSnapshot: 默认只抓第 1 页（监控够用，新项目总在最前）', async () => {
+  const urls = [];
+  const fake = async (url) => {
+    const u = String(url);
+    urls.push(u);
+    let body = FIXTURE;
+    const m = u.match(/m=get_opps&type=2&id=(\d+)&p=(\d+)/);
+    if (m) {
+      const rows = Array.from({ length: 20 }, (_, i) =>
+        `<tr><td><a href="/app/opp/view.php?id=q${i}" target="_blank">默认页项目${i}</a></td>`
+        + `<td>2026-02-0${(i % 9) + 1}</td><td>运行中</td></tr>`).join('');
+      body = `<table class="table1">${rows}</table><div class="pagebar"><a href="?p=2">下一页</a></div>`;
+    }
+    return {
+      ok: true, status: 200,
+      headers: { get: () => 'text/html; charset=utf-8' },
+      arrayBuffer: async () => new TextEncoder().encode(body).buffer,
+    };
+  };
+
+  await fetchOrgSnapshot('https://gz.zhiyuanyun.com/app/org/view.php?id=abc', { fetchImpl: fake });
+  assert.ok(!urls.some((u) => /[?&]p=2/.test(u)), '默认不应该去抓第 2 页');
 });
