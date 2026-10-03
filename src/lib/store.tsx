@@ -19,6 +19,10 @@ import {
 } from '../core/account.mjs';
 import type { AccountSession } from './types';
 import {
+  saveCredentials as saveCredentialsSecure,
+  loadCredentials, clearCredentials, loadSavedUsername,
+} from './credentials';
+import {
   loadState, saveState, clearState, makeWatch,
   addWatch as addWatchOp, removeWatch as removeWatchOp, updateWatch as updateWatchOp,
   updateSettings as updateSettingsOp, pushNotifications, markAllRead, clearNotifications,
@@ -63,12 +67,24 @@ export interface StoreValue {
   clearSearchHistoryAll: () => Promise<void>;
 
   /* ---------------------------------------------------- 志愿云账号 */
-  /** 登录（密码只在内存里用于本次请求，绝不落盘） */
+  /** 登录（密码只在内存里用于本次请求；remember=true 时存入系统加密存储） */
   loginAccount: (
     username: string,
     password: string,
-    captcha?: string
+    captcha?: string,
+    remember?: boolean
   ) => Promise<{ ok: boolean; needCaptcha?: boolean; message: string; diag?: string }>;
+  /**
+   * 自动登录：用系统加密存储里的凭据重新登录。
+   * 网站本身每次关闭再进都要重登，所以 App 需要这个。
+   */
+  autoLogin: () => Promise<{ ok: boolean; needCaptcha?: boolean; message: string }>;
+  /** 是否已保存可自动登录的凭据 */
+  hasSavedCredentials: () => Promise<boolean>;
+  /** 取已保存的用户名（预填输入框） */
+  savedUsername: () => Promise<string | null>;
+  /** 清除已保存的凭据 */
+  forgetCredentials: () => Promise<void>;
   /** 退出登录 */
   logoutAccount: () => Promise<void>;
   /** 用当前会话构造请求用的 session（供账号页取数据） */
@@ -294,7 +310,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const loginAccount = useCallback(
-    async (username: string, password: string, captcha?: string) => {
+    async (username: string, password: string, captcha?: string, remember = true) => {
       const uname = username.trim();
       if (!uname) return { ok: false, message: '请输入用户名' };
       if (!password) return { ok: false, message: '请输入密码' };
@@ -315,15 +331,48 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         await persist((s) => ({ ...s, account: next }));
       });
 
-      // 顺便确认会话真的能读到数据
-      void checkSession(session, SEARCH_HOST).then((r) => {
-        if (!r.ok) console.warn('[account] 登录成功但会话校验未通过，可能需要重新登录');
-      });
+      // 记住密码用于自动登录（存在系统加密存储里，不是明文文件）
+      if (remember) {
+        await saveCredentialsSecure({ username: uname, password }).catch(() => undefined);
+      } else {
+        await clearCredentials().catch(() => undefined);
+      }
 
       return { ok: true, message: res.message || '登录成功' };
     },
     [enqueue, persist]
   );
+
+  /**
+   * 自动登录：拿系统加密存储里的用户名密码重新登一次。
+   * 没有存过凭据、或者这次需要验证码，就返回失败让上层提示用户手动登录。
+   */
+  const autoLogin = useCallback(async () => {
+    const cred = await loadCredentials();
+    if (!cred) return { ok: false, message: '没有保存登录信息' };
+
+    const session = createSession();
+    const res = await loginAccountApi(session, SEARCH_HOST, cred.username, cred.password);
+    if (!res.ok) {
+      // 需要验证码就如实上报，让界面提示用户去公众号取码
+      return res;
+    }
+
+    const next: AccountSession = {
+      username: cred.username,
+      cookie: session.cookie,
+      seid: session.seid,
+      loginAt: new Date().toISOString(),
+    };
+    await enqueue(async () => {
+      await persist((s) => ({ ...s, account: next }));
+    });
+    return { ok: true, message: res.message || '已自动登录' };
+  }, [enqueue, persist]);
+
+  const hasSavedCredentials = useCallback(async () => (await loadCredentials()) !== null, []);
+  const savedUsername = useCallback(async () => loadSavedUsername(), []);
+  const forgetCredentials = useCallback(async () => { await clearCredentials(); }, []);
 
   const logoutAccount = useCallback(async () => {
     const a = stateRef.current.account;
@@ -331,6 +380,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       // 尽力通知服务器退出，失败也无所谓，本地照清
       void logoutAccountApi({ cookie: a.cookie, seid: a.seid }, SEARCH_HOST);
     }
+    // 退出时一并清掉自动登录凭据，否则会立刻被自动登回去
+    await clearCredentials().catch(() => undefined);
     await enqueue(async () => {
       await persist((s) => ({ ...s, account: null }));
     });
@@ -350,6 +401,29 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       );
     });
   }, [enqueue, persist]);
+
+  /* ------------------------------------------ 启动时自动登录 */
+
+  /**
+   * 志愿云网站本身每次关闭再打开都要重新登录，
+   * 所以启动后如果有保存的凭据、但当前没有会话，就自动登一次。
+   *
+   * 主动退出登录时凭据已被清掉，所以不会出现「退出又被自动登回去」。
+   */
+  useEffect(() => {
+    if (!ready || state.account) return;
+    let alive = true;
+    (async () => {
+      try {
+        if (!(await hasSavedCredentials())) return;
+        if (!alive) return;
+        await autoLogin();
+      } catch {
+        // 自动登录失败不打扰用户，等他自己去账号页处理
+      }
+    })();
+    return () => { alive = false; };
+  }, [ready, state.account, autoLogin, hasSavedCredentials]);
 
   const removeWatch = useCallback(
     async (key: string) => {
@@ -572,7 +646,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ready, state, checking, lastRunMessage, bg,
       addWatchFromUrl, addWatchFromSearchResult,
       recordSearch, removeSearchHistoryItem, clearSearchHistoryAll,
-      loginAccount, logoutAccount, accountSession, verifyAccount, markAccountSynced,
+      loginAccount, autoLogin, hasSavedCredentials, savedUsername,
+      forgetCredentials, logoutAccount, accountSession, verifyAccount, markAccountSynced,
       removeWatch, setWatchEnabled, renameWatch,
       checkAll, checkOneWatch, updateSettings,
       markAllNotificationsRead, clearAllNotifications, resetAll,
@@ -582,7 +657,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ready, state, checking, lastRunMessage, bg,
       addWatchFromUrl, addWatchFromSearchResult,
       recordSearch, removeSearchHistoryItem, clearSearchHistoryAll,
-      loginAccount, logoutAccount, accountSession, verifyAccount, markAccountSynced,
+      loginAccount, autoLogin, hasSavedCredentials, savedUsername,
+      forgetCredentials, logoutAccount, accountSession, verifyAccount, markAccountSynced,
       removeWatch, setWatchEnabled, renameWatch,
       checkAll, checkOneWatch, updateSettings,
       markAllNotificationsRead, clearAllNotifications, resetAll, refreshBgStatus,

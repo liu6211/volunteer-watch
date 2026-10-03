@@ -31,7 +31,7 @@ interface Data {
 }
 
 export default function AccountScreen() {
-  const { state, accountSession, logoutAccount, markAccountSynced, verifyAccount } = useStore();
+  const { state, accountSession, logoutAccount, markAccountSynced, verifyAccount, autoLogin } = useStore();
   const insets = useSafeAreaInsets();
 
   const account = state.account;
@@ -81,9 +81,19 @@ export default function AccountScreen() {
       const ok = await verifyAccount();
       if (!alive) return;
       if (!ok) {
-        setExpired(true);
-        setError('登录已过期，请重新登录');
-        return;
+        // 会话过期：先试着用保存的凭据自动登录一次，成功就无感恢复
+        const auto = await autoLogin().catch(() => ({ ok: false, message: '自动登录失败' }));
+        if (!alive) return;
+        if (!auto.ok) {
+          setExpired(true);
+          const m = auto as { needCaptcha?: boolean; message?: string };
+          setError(
+            m.needCaptcha
+              ? '登录已过期，而且这次需要验证码，请手动登录'
+              : (m.message || '登录已过期，请重新登录')
+          );
+          return;
+        }
       }
       void load('projects');
     })();

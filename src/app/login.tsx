@@ -7,9 +7,9 @@
  *     而且要去微信公众号取码。所以验证码输入框平时是隐藏的，
  *     只有在登录失败且服务器明确要求时才出现。
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View,
+  KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Switch, Text, TextInput, View,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,7 +19,7 @@ import { colors, radius as R, spacing, themedStyles } from '../lib/theme';
 import { Backdrop, Glass, GlassButton, Icon, Tap } from '../components/ui';
 
 export default function LoginScreen() {
-  const { state, loginAccount } = useStore();
+  const { state, loginAccount, savedUsername, hasSavedCredentials } = useStore();
   const insets = useSafeAreaInsets();
 
   const [username, setUsername] = useState(state.account?.username ?? '');
@@ -30,23 +30,40 @@ export default function LoginScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [diag, setDiag] = useState('');
+  const [remember, setRemember] = useState(true);
+  const [hasSaved, setHasSaved] = useState(false);
+
+  // 预填上次的用户名，并默认勾上「记住密码」
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const [name, saved] = await Promise.all([savedUsername(), hasSavedCredentials()]);
+      if (!alive) return;
+      if (name) setUsername((cur) => cur || name);
+      setHasSaved(saved);
+    })();
+    return () => { alive = false; };
+  }, [savedUsername, hasSavedCredentials]);
 
   const submit = async () => {
     setBusy(true);
     setError('');
     setDiag('');
     try {
-      const res = await loginAccount(username, password, captcha || undefined);
+      const res = await loginAccount(username, password, captcha || undefined, remember);
       if (res.ok) {
         setPassword('');
         router.replace('/account');
         return;
       }
       if (res.needCaptcha) {
+        // 需要验证码：这是提示，不是错误，用引导性文案
         setNeedCaptcha(true);
         setCaptchaHint(res.message);
+        setError('');
       } else {
-        setError(res.message);
+        // 账号密码不对等普通失败：必须明确告诉用户
+        setError(res.message || '登录失败');
         if (res.diag) setDiag(res.diag);
       }
     } catch (e) {
@@ -129,6 +146,21 @@ export default function LoginScreen() {
               </>
             ) : null}
 
+            {/* 记住密码：网站本身每次都要重登，靠这个自动登录 */}
+            <View style={styles.rememberRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rememberTitle}>记住密码（自动登录）</Text>
+                <Text style={styles.rememberHint}>
+                  密码存在手机的系统加密存储里（iOS 钥匙串），不会明文保存
+                </Text>
+              </View>
+              <Switch
+                value={remember}
+                onValueChange={setRemember}
+                trackColor={{ true: colors.primary, false: colors.track }}
+              />
+            </View>
+
             {error ? (
               <View style={styles.errorBox}>
                 <Icon name="alert-circle" size={16} color={colors.danger} />
@@ -197,6 +229,13 @@ const styles = themedStyles(() => StyleSheet.create({
     backgroundColor: colors.warnDim, borderRadius: R.sm, padding: spacing.md,
   },
   hintText: { flex: 1, fontSize: 12, color: colors.warn, lineHeight: 18 },
+
+  rememberRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    marginTop: spacing.xl,
+  },
+  rememberTitle: { fontSize: 13, fontWeight: '700', color: colors.text },
+  rememberHint: { fontSize: 10.5, color: colors.textFaint, marginTop: 3, lineHeight: 15 },
 
   errorBox: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.lg,

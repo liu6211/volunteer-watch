@@ -88,6 +88,9 @@ function absorbCookies(session, res) {
   session.cookie = [...jar.entries()].map(([k, v]) => `${k}=${v}`).join('; ');
 }
 
+/** 单次请求超时（毫秒）。没有它的话网络一卡，登录按钮会一直转圈 */
+const REQUEST_TIMEOUT_MS = 25000;
+
 async function req(session, url, opts = {}) {
   const doFetch = opts.fetchImpl || fetch;
   const headers = {
@@ -96,12 +99,31 @@ async function req(session, url, opts = {}) {
     ...(session.cookie ? { Cookie: session.cookie } : {}),
     ...(opts.headers || {}),
   };
-  const { fetchImpl: _ignored, ...rest } = opts;
+  const { fetchImpl: _ignored, timeoutMs = REQUEST_TIMEOUT_MS, ...rest } = opts;
   void _ignored;
-  // credentials: include 让运行环境也参与 Cookie 存取（手机上有用）
-  const res = await doFetch(url, { credentials: 'include', ...rest, headers, redirect: 'follow' });
-  absorbCookies(session, res);
-  return res;
+
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), timeoutMs);
+  try {
+    // credentials: include 让运行环境也参与 Cookie 存取（手机上有用）
+    const res = await doFetch(url, {
+      credentials: 'include',
+      ...rest,
+      headers,
+      redirect: 'follow',
+      signal: ac.signal,
+    });
+    absorbCookies(session, res);
+    return res;
+  } catch (e) {
+    // 把超时翻译成人话，否则用户只看到一串英文
+    if ((e && e.name === 'AbortError') || /aborted|timeout/i.test(String(e && e.message))) {
+      throw new Error(`请求超时（${Math.round(timeoutMs / 1000)} 秒无响应），请检查网络后重试`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 const origin = (host) => `https://${host}`;
@@ -134,13 +156,20 @@ export async function checkNeedCaptcha(session, host, username, opts = {}) {
 
 /**
  * 登录
+ * @param {{cookie:string,seid:string}} session
+ * @param {string} host
+ * @param {string} username
+ * @param {string} password
+ * @param {string} [captcha] 验证码（服务端要时才需要）
+ * @param {{fetchImpl?: typeof fetch}} [opts] 便于测试注入
  * @returns {Promise<{ok: boolean, needCaptcha?: boolean, message: string}>}
  */
-export async function login(session, host, username, password, captcha) {
+export async function login(session, host, username, password, captcha, opts = {}) {
   const base = origin(host);
+  const fetchImpl = opts.fetchImpl;
 
   // 1. 建会话 + 取 seid
-  const page = await req(session, `${base}/app/user/login.php`);
+  const page = await req(session, `${base}/app/user/login.php`, { fetchImpl });
   const html = await page.text();
   const m = html.match(/id="seid"\s+value="([^"]*)"/);
   session.seid = m ? m[1] : '';
@@ -165,6 +194,7 @@ export async function login(session, host, username, password, captcha) {
 
   const res = await req(session, `${base}/app/user/login.php?m=login`, {
     method: 'POST',
+    fetchImpl,
     credentials: 'include',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
@@ -213,15 +243,29 @@ export async function login(session, host, username, password, captcha) {
   }
 
   const code = String(obj.code);
-  const msg = obj.msg || '';
+  const msg = String(obj.msg || '');
+  const show = obj.show
+    ? String(obj.show).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+    : '';
 
   if (code === '0') return { ok: true, message: msg || '登录成功' };
 
-  // code=1 且带回一段说明 → 需要验证码
-  const desc = obj.show
-    ? String(obj.show).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
-    : msg;
-  return { ok: false, needCaptcha: true, message: desc || '需要登录验证码' };
+  /*
+   * ⚠️ code 非 0 有两种完全不同的情况，必须分开：
+   *   1. 需要验证码 —— 提示里会出现「验证码」，此时才该显示验证码输入框
+   *   2. 账号或密码不对 —— 只是普通错误，必须把服务器的原话告诉用户
+   * 早期版本把两者都当成「需要验证码」，导致密码输错时不但不提示，
+   * 反而弹出一个验证码框，用户完全不知道发生了什么。
+   */
+  const haystack = `${msg} ${show}`;
+  const needsCaptcha = /验证码/.test(haystack);
+
+  return {
+    ok: false,
+    needCaptcha: needsCaptcha,
+    message: show || msg || (needsCaptcha ? '需要登录验证码' : '登录失败'),
+    diag,
+  };
 }
 
 /** 退出登录（尽力而为，失败也不影响本地清会话） */

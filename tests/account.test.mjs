@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  parseMyProjects, parseMyOrgs, parseMyHours,
+  parseMyProjects, parseMyOrgs, parseMyHours, login,
   SITE_PUBKEY, ACCOUNT_PATHS, createSession, checkNeedCaptcha,
 } from '../src/core/account.mjs';
 
@@ -177,6 +177,74 @@ test('parseMyHours: 注释掉的旧记录不会被算进去', () => {
   const r = parseMyHours(html);
   assert.equal(r.items.length, 1, '被注释掉的行不应计入');
   assert.equal(r.total, 1);
+});
+
+/* ------------------------------------------------ 登录结果分类 */
+
+/** 造一个假的登录环境：GET 返回登录页，POST 返回指定结果 */
+function fakeLoginEnv(postBody) {
+  return async (url, opts = {}) => {
+    const isPost = (opts.method || 'GET').toUpperCase() === 'POST';
+    const text = isPost
+      ? postBody
+      : '<html><input type="hidden" id="seid" value="TESTSEID"></html>';
+    return {
+      ok: true,
+      status: 200,
+      headers: { get: () => null, getSetCookie: () => [] },
+      text: async () => text,
+    };
+  };
+}
+
+test('login: 密码错误时必须报错，【不能】要求验证码', async () => {
+  const r = await login(
+    createSession(), 'gz.zhiyuanyun.com', 'someone', 'wrong-pass', undefined,
+    { fetchImpl: fakeLoginEnv('{"code":"1","msg":"用户名或密码错误"}') }
+  );
+  assert.equal(r.ok, false);
+  assert.equal(r.needCaptcha, false, '密码错不是验证码问题，不能弹验证码框');
+  assert.match(r.message, /密码错误/);
+});
+
+test('login: 提示里带「验证码」时才要求填验证码', async () => {
+  const r = await login(
+    createSession(), 'gz.zhiyuanyun.com', 'someone', 'pw', undefined,
+    { fetchImpl: fakeLoginEnv('{"code":"1","show":"为了防止暴力登录，系统增加登录验证码"}') }
+  );
+  assert.equal(r.ok, false);
+  assert.equal(r.needCaptcha, true);
+  assert.match(r.message, /验证码/);
+});
+
+test('login: 成功时 ok=true', async () => {
+  const r = await login(
+    createSession(), 'gz.zhiyuanyun.com', 'someone', 'pw', undefined,
+    { fetchImpl: fakeLoginEnv('{"code":"0","msg":"登录成功","referer":"/app/user/home.php"}') }
+  );
+  assert.equal(r.ok, true);
+});
+
+test('login: 服务器把登录页返回回来时，明确指出会话没建立', async () => {
+  const r = await login(
+    createSession(), 'gz.zhiyuanyun.com', 'someone', 'pw', undefined,
+    { fetchImpl: fakeLoginEnv('<html><div id="ulogin">登录志愿贵州</div></html>') }
+  );
+  assert.equal(r.ok, false);
+  assert.match(r.message, /会话没有建立|登录页/);
+  assert.ok(r.diag, '应带上诊断信息');
+});
+
+test('login: 请求超时会翻译成中文提示，而不是一直转圈', async () => {
+  const hang = async () => {
+    const e = new Error('Aborted');
+    e.name = 'AbortError';
+    throw e;
+  };
+  await assert.rejects(
+    () => login(createSession(), 'gz.zhiyuanyun.com', 'u', 'p', undefined, { fetchImpl: hang }),
+    /超时/
+  );
 });
 
 /* ------------------------------------------------ 常量与工具 */
