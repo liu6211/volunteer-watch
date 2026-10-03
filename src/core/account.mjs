@@ -19,6 +19,7 @@
  */
 
 import { rsaEncrypt } from './rsa.mjs';
+import { resolveStableOrgId } from './search.mjs';
 
 const UA =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
@@ -958,6 +959,90 @@ export async function postComment(session, host, params, opts = {}) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+/* ------------------------------------------------------------ 加入团体 */
+
+/**
+ * 加入志愿团体。
+ *
+ * 接口实测自 login.js 的 org_join（普通加入这一支）：
+ *   $.post('/app/api/view.php?m=org_join', {org_id}, cb)
+ *   （type==1 的「免审加入」还要 org_pwd + org_pwd_yzm，App 里不走那条）
+ *
+ * ⚠️ 需要的是【数字团体编号】。搜索结果给的是加密链接 id，
+ * 所以先打开团体页把数字编号解析出来（和添加监控时同一套逻辑）。
+ *
+ * 站点只回一段 msg、没有可靠 code，所以最后用
+ * 【重新拉一次「我的团体」】确认是否真的加入了，不轻信文案。
+ */
+export async function joinOrg(session, host, linkId, opts = {}) {
+  if (!session || !session.cookie) return { ok: false, message: '请先登录志愿云账号' };
+  if (!linkId) return { ok: false, message: '缺少团体信息' };
+
+  // 1. 解析稳定的数字编号
+  let orgId = String(linkId);
+  try {
+    const stable = await resolveStableOrgId(host, linkId, { fetchImpl: opts.fetchImpl });
+    if (stable.stableId) orgId = stable.stableId;
+  } catch {
+    // 解析失败就用原 id 试一次
+  }
+
+  // 2. 提交加入
+  const doFetch = opts.fetchImpl || fetch;
+  const body = new URLSearchParams({ org_id: orgId });
+
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), opts.timeoutMs ?? REQUEST_TIMEOUT_MS);
+  let raw = '';
+  try {
+    const res = await doFetch(`${origin(host)}/app/api/view.php?m=org_join`, {
+      method: 'POST',
+      headers: {
+        'User-Agent': UA,
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+        Referer: `${origin(host)}/app/org/view.php?id=${encodeURIComponent(linkId)}`,
+        ...(session.cookieMode === 'platform' ? {} : { Cookie: session.cookie }),
+      },
+      body: body.toString(),
+      credentials: session.cookieMode === 'platform' ? 'include' : 'omit',
+      signal: ac.signal,
+      redirect: 'follow',
+    });
+    raw = await res.text();
+  } catch (e) {
+    if ((e && e.name === 'AbortError') || /aborted|timeout/i.test(String(e && e.message))) {
+      throw new Error('加入请求超时，请检查网络后重试');
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+
+  let msg = '';
+  try {
+    const o = JSON.parse(raw);
+    msg = String(o.msg || '');
+  } catch {
+    msg = textOf(raw).slice(0, 100);
+  }
+
+  // 3. 用「我的团体」验证真实结果
+  try {
+    const after = await fetchMyOrgs(session, host);
+    const joined = after.items.some((it) => String(it.orgId) === orgId);
+    if (joined) return { ok: true, message: '已加入该团体' };
+  } catch {
+    // 验证不了就如实反馈服务器的原话
+  }
+
+  // 站点常见文案：「已提交申请，等待审核」也算成功
+  if (/申请|审核|已加入|成功/.test(msg) && !/失败|错误|不能|无法/.test(msg)) {
+    return { ok: true, message: msg };
+  }
+  return { ok: false, message: msg || '加入没有成功，请到网站操作' };
 }
 
 /* ------------------------------------------------------------ 我的团体 */

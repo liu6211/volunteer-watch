@@ -173,6 +173,14 @@ export function submitScore(
   opts?: { fetchImpl?: typeof fetch; timeoutMs?: number }
 ): Promise<{ ok: boolean; message: string }>;
 
+/** 加入团体（内部会把加密链接 id 解析成数字编号，并用「我的团体」验证结果） */
+export function joinOrg(
+  session: AccountSessionState,
+  host: string,
+  linkId: string,
+  opts?: { fetchImpl?: typeof fetch; timeoutMs?: number }
+): Promise<{ ok: boolean; message: string }>;
+
 export function parseMyOrgs(html: string): { items: MyOrg[] };
 
 /** 退出团体 / 删除申请（会重新拉列表验证真实结果，不轻信文案） */

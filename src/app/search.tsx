@@ -6,12 +6,13 @@
  */
 import React, { useCallback, useState } from 'react';
 import {
-  ActivityIndicator, FlatList, Keyboard, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, Alert, FlatList, Keyboard, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SEARCH_HOST, GUIZHOU_AREAS, searchOrgs } from '../core/search.mjs';
+import { joinOrg } from '../core/account.mjs';
 import type { OrgSearchItem } from '../core/search.mjs';
 import { useStore } from '../lib/store';
 import { colors, radius as R, spacing, themedStyles } from '../lib/theme';
@@ -25,7 +26,7 @@ const HOST = SEARCH_HOST;
 
 export default function SearchScreen() {
   const {
-    state, addWatchFromSearchResult,
+    state, addWatchFromSearchResult, accountSession, autoLogin,
     recordSearch, removeSearchHistoryItem, clearSearchHistoryAll,
   } = useStore();
   const insets = useSafeAreaInsets();
@@ -38,6 +39,8 @@ export default function SearchScreen() {
   const [error, setError] = useState('');
   const [searched, setSearched] = useState(false);
   const [addingId, setAddingId] = useState('');
+  /** 正在加入的团体（linkId） */
+  const [joiningId, setJoiningId] = useState('');
 
   const history = state.searchHistory ?? [];
 
@@ -84,6 +87,44 @@ export default function SearchScreen() {
     }
   };
 
+  /**
+   * 加入团体（真正去站点申请加入，不是加进监控列表）。
+   * 写操作 → 二次确认；需要登录；结束后用「我的团体」验证结果。
+   */
+  const onJoinOrg = (item: OrgSearchItem) => {
+    if (!state.account) {
+      Alert.alert('还没登录', '加入团体需要先登录志愿云账号。', [
+        { text: '取消', style: 'cancel' },
+        { text: '去登录', onPress: () => router.push('/login') },
+      ]);
+      return;
+    }
+    Alert.alert(
+      '加入团体',
+      `确定申请加入「${item.name}」吗？\n\n` +
+      '有些团体需要团长审核，提交后会出现在「我的志愿云 → 我的团体」里。',
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '确定加入',
+          onPress: async () => {
+            setJoiningId(item.linkId);
+            setError('');
+            try {
+              await autoLogin().catch(() => undefined);
+              const r = await joinOrg(accountSession(), HOST, item.linkId);
+              Alert.alert(r.ok ? '已提交' : '没能加入', r.message);
+            } catch (e) {
+              Alert.alert('出错', (e as Error).message);
+            } finally {
+              setJoiningId('');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const renderItem = ({ item }: { item: OrgSearchItem }) => {
     const adding = addingId === item.linkId;
     return (
@@ -101,12 +142,26 @@ export default function SearchScreen() {
           {adding ? (
             <ActivityIndicator size="small" color={colors.primary} />
           ) : (
-            <Tap onPress={() => { void onAdd(item); }}>
-              <View style={styles.addBtn}>
-                <Icon name="add" size={15} color={colors.textOnAccent} />
-                <Text style={styles.addBtnText}>监控</Text>
-              </View>
-            </Tap>
+            <View style={styles.btnGroup}>
+              {/* 真正加入这个团体（需要登录志愿云账号） */}
+              <Tap onPress={() => { void onJoinOrg(item); }} disabled={joiningId === item.linkId}>
+                <View style={styles.joinBtn}>
+                  {joiningId === item.linkId
+                    ? <ActivityIndicator size="small" color={colors.primary} />
+                    : <Icon name="person-add-outline" size={14} color={colors.primary} />}
+                  <Text style={styles.joinBtnText}>
+                    {joiningId === item.linkId ? '加入中' : '加入'}
+                  </Text>
+                </View>
+              </Tap>
+              {/* 只加入监控列表，不去站点报名 */}
+              <Tap onPress={() => { void onAdd(item); }}>
+                <View style={styles.addBtn}>
+                  <Icon name="eye-outline" size={14} color={colors.textOnAccent} />
+                  <Text style={styles.addBtnText}>监控</Text>
+                </View>
+              </Tap>
+            </View>
           )}
         </View>
       </Glass>
@@ -300,6 +355,14 @@ const styles = themedStyles(() => StyleSheet.create({
   resultText: { flex: 1 },
   resultName: { fontSize: 14, fontWeight: '700', color: colors.text, lineHeight: 19 },
   resultMeta: { fontSize: 11, color: colors.textFaint, marginTop: 3 },
+  btnGroup: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  joinBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: colors.primaryDim,
+    paddingHorizontal: spacing.md, paddingVertical: 7,
+    borderRadius: R.pill,
+  },
+  joinBtnText: { fontSize: 12, color: colors.primary, fontWeight: '800' },
   addBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 3,
     backgroundColor: colors.primary,
