@@ -5,18 +5,25 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, View,
+  ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   fetchMyProjects, fetchMyOrgs, fetchMyHours, ACCOUNT_FEATURES, cancelApplication,
+  fetchJobOptions, changeJob, applyHour, submitScore,
 } from '../core/account.mjs';
 import { SEARCH_HOST } from '../core/search.mjs';
 import { useStore } from '../lib/store';
 import { colors, radius as R, spacing, themedStyles } from '../lib/theme';
 import { Backdrop, Glass, GlassButton, Icon, Tap, type IconName } from '../components/ui';
+
+type Panel =
+  | { kind: '' }
+  | { kind: 'job'; oppId: string; name: string; loading: boolean; jobs: { id: string; name: string }[]; picked: string }
+  | { kind: 'hour'; oppId: string; name: string; hour: string; memo: string }
+  | { kind: 'score'; oppId: string; name: string; scoreId: string; s1: number; s2: number; s3: number; content: string };
 
 type Tab = 'projects' | 'orgs' | 'hours' | 'more';
 
@@ -46,6 +53,9 @@ export default function AccountScreen() {
   const [expired, setExpired] = useState(false);
   /** 正在取消报名的报名记录编号 */
   const [canceling, setCanceling] = useState('');
+  /** 更换岗位 / 申请时长 / 评价 的内联表单 */
+  const [panel, setPanel] = useState<Panel>({ kind: '' });
+  const [panelBusy, setPanelBusy] = useState(false);
 
   const load = useCallback(
     async (which: Tab, isRefresh = false) => {
@@ -106,6 +116,40 @@ export default function AccountScreen() {
     // 只在登录用户变化时执行
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account?.loginAt]);
+
+  /**
+   * 三个写操作（更换岗位 / 申请时长 / 评价）统一提交：
+   * 先自动重登（会话只有 30 分钟），提交后重新拉列表。
+   */
+  const runPanel = async (fn: () => Promise<{ ok: boolean; message: string }>) => {
+    setPanelBusy(true);
+    try {
+      await autoLogin().catch(() => undefined);
+      const r = await fn();
+      Alert.alert(r.ok ? '成功' : '没成功', r.message);
+      if (r.ok) {
+        setPanel({ kind: '' });
+        await load('projects');
+      }
+    } catch (e) {
+      Alert.alert('出错', (e as Error).message);
+    } finally {
+      setPanelBusy(false);
+    }
+  };
+
+  /** 打开「更换岗位」：先查该项目的可选岗位 */
+  const openJobPanel = async (item: { oppId: string; name: string }) => {
+    setPanel({ kind: 'job', oppId: item.oppId, name: item.name, loading: true, jobs: [], picked: '' });
+    try {
+      await autoLogin().catch(() => undefined);
+      const r = await fetchJobOptions(accountSession(), SEARCH_HOST, item.oppId);
+      setPanel({ kind: 'job', oppId: item.oppId, name: r.oppName || item.name, loading: false, jobs: r.jobs, picked: '' });
+    } catch (e) {
+      setPanel({ kind: '' });
+      Alert.alert('读取岗位失败', (e as Error).message);
+    }
+  };
 
   const onSwitch = (t: Tab) => {
     setTab(t);
@@ -335,6 +379,163 @@ export default function AccountScreen() {
                   {it.org}
                   {it.joinedAt ? ` · 加入于 ${it.joinedAt}` : ''}
                 </Text>
+
+                {/* ---- 可用操作（站点上有哪个就显示哪个）---- */}
+                <View style={styles.actRow}>
+                  {it.actions?.some((a: { fn: string }) => a.fn === 'del_opp_vol') ? (
+                    <Tap onPress={() => onCancelApply(it)}>
+                      <View style={styles.actBtnDanger}>
+                        <Icon name="close-circle-outline" size={14} color={colors.danger} />
+                        <Text style={styles.actBtnDangerText}>
+                          {canceling === it.oppId ? '正在取消…' : '取消报名'}
+                        </Text>
+                      </View>
+                    </Tap>
+                  ) : null}
+
+                  {it.actions?.some((a: { fn: string }) => a.fn === 'change_group_div') ? (
+                    <Tap onPress={() => { void openJobPanel(it); }}>
+                      <View style={styles.actBtn}>
+                        <Icon name="swap-horizontal-outline" size={14} color={colors.primary} />
+                        <Text style={styles.actBtnText}>更换岗位</Text>
+                      </View>
+                    </Tap>
+                  ) : null}
+
+                  {it.actions?.some((a: { fn: string }) => a.fn === 'show_apply_hour') ? (
+                    <>
+                      <Tap onPress={() => setPanel({ kind: 'hour', oppId: it.oppId, name: it.name, hour: '', memo: '' })}>
+                        <View style={styles.actBtn}>
+                          <Icon name="time-outline" size={14} color={colors.primary} />
+                          <Text style={styles.actBtnText}>申请时长</Text>
+                        </View>
+                      </Tap>
+                      <Tap onPress={() => setPanel({ kind: 'score', oppId: it.oppId, name: it.name, scoreId: '0', s1: 5, s2: 5, s3: 5, content: '' })}>
+                        <View style={styles.actBtn}>
+                          <Icon name="star-outline" size={14} color={colors.primary} />
+                          <Text style={styles.actBtnText}>评价</Text>
+                        </View>
+                      </Tap>
+                    </>
+                  ) : null}
+                </View>
+
+                {/* ---- 内联表单 ---- */}
+                {panel.kind !== '' && panel.oppId === it.oppId ? (
+                  <View style={styles.panel}>
+                    <Text style={styles.panelTitle}>
+                      {panel.kind === 'job' ? '更换岗位' : panel.kind === 'hour' ? '申请服务时长' : '评价项目'}
+                    </Text>
+
+                    {panel.kind === 'job' ? (
+                      panel.loading ? (
+                        <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.md }} />
+                      ) : panel.jobs.length === 0 ? (
+                        <Text style={styles.panelHint}>没有可选岗位</Text>
+                      ) : (
+                        <View style={styles.chips}>
+                          {panel.jobs.map((j) => (
+                            <Tap key={j.id} onPress={() => setPanel({ ...panel, picked: j.id })}>
+                              <View style={[styles.chip, panel.picked === j.id && styles.chipActive]}>
+                                <Text style={[styles.chipText, panel.picked === j.id && styles.chipTextActive]}>
+                                  {j.name}
+                                </Text>
+                              </View>
+                            </Tap>
+                          ))}
+                        </View>
+                      )
+                    ) : null}
+
+                    {panel.kind === 'hour' ? (
+                      <>
+                        <View style={styles.pField}>
+                          <Text style={styles.pLabel}>时长（小时）</Text>
+                          <TextInput
+                            style={styles.pInput}
+                            value={panel.hour}
+                            onChangeText={(v) => setPanel({ ...panel, hour: v })}
+                            placeholder="例如 3 或 3.5"
+                            placeholderTextColor={colors.textFaint}
+                            keyboardType="decimal-pad"
+                          />
+                        </View>
+                        <View style={styles.pField}>
+                          <Text style={styles.pLabel}>备注</Text>
+                          <TextInput
+                            style={styles.pInput}
+                            value={panel.memo}
+                            onChangeText={(v) => setPanel({ ...panel, memo: v })}
+                            placeholder="例如 10月6日上午在万达广场做秩序维护"
+                            placeholderTextColor={colors.textFaint}
+                          />
+                        </View>
+                      </>
+                    ) : null}
+
+                    {panel.kind === 'score' ? (
+                      <>
+                        {([
+                          ['对项目开展培训的满意度', 's1'],
+                          ['与志愿团体合作的满意度', 's2'],
+                          ['项目执行与计划的符合度', 's3'],
+                        ] as const).map(([label, key]) => (
+                          <View key={key} style={styles.starRow}>
+                            <Text style={styles.pLabel}>{label}</Text>
+                            <View style={styles.stars}>
+                              {[1, 2, 3, 4, 5].map((n) => (
+                                <Tap key={n} onPress={() => setPanel({ ...panel, [key]: n } as Panel)}>
+                                  <Icon
+                                    name={panel[key] >= n ? 'star' : 'star-outline'}
+                                    size={17}
+                                    color={panel[key] >= n ? colors.warn : colors.textFaint}
+                                  />
+                                </Tap>
+                              ))}
+                            </View>
+                          </View>
+                        ))}
+                        <View style={styles.pField}>
+                          <Text style={styles.pLabel}>评价内容</Text>
+                          <TextInput
+                            style={styles.pInput}
+                            value={panel.content}
+                            onChangeText={(v) => setPanel({ ...panel, content: v })}
+                            placeholder="说说感受（可留空）"
+                            placeholderTextColor={colors.textFaint}
+                          />
+                        </View>
+                      </>
+                    ) : null}
+
+                    <View style={styles.panelBtns}>
+                      <GlassButton
+                        label={panelBusy ? '提交中…' : '提交'}
+                        loading={panelBusy}
+                        variant="primary"
+                        onPress={() => {
+                          if (panel.kind === 'job') {
+                            void runPanel(() => changeJob(accountSession(), SEARCH_HOST, panel.oppId, panel.picked));
+                          } else if (panel.kind === 'hour') {
+                            void runPanel(() => applyHour(accountSession(), SEARCH_HOST, panel.oppId, panel.hour, panel.memo));
+                          } else if (panel.kind === 'score') {
+                            void runPanel(() => submitScore(
+                              accountSession(), SEARCH_HOST, panel.oppId, panel.scoreId,
+                              [panel.s1, panel.s2, panel.s3], panel.content
+                            ));
+                          }
+                        }}
+                        style={{ flex: 1 }}
+                      />
+                      <GlassButton
+                        label="取消"
+                        variant="glass"
+                        onPress={() => setPanel({ kind: '' })}
+                        style={{ flex: 1 }}
+                      />
+                    </View>
+                  </View>
+                ) : null}
               </>
             ) : null}
 
@@ -460,7 +661,43 @@ const styles = themedStyles(() => StyleSheet.create({
 
   itemCard: { marginBottom: spacing.sm },
 
-  actRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.md },
+  actRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md },
+  actBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: spacing.md, paddingVertical: 7,
+    borderRadius: R.pill, backgroundColor: colors.primaryDim,
+  },
+  actBtnText: { fontSize: 12, fontWeight: '700', color: colors.primary },
+
+  panel: {
+    marginTop: spacing.md, paddingTop: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.glassDivider,
+  },
+  panelTitle: { fontSize: 13.5, fontWeight: '800', color: colors.text, marginBottom: spacing.sm },
+  panelHint: { fontSize: 12, color: colors.textFaint, marginTop: spacing.sm },
+  panelBtns: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
+
+  pField: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: colors.field, borderRadius: R.sm,
+    paddingHorizontal: spacing.md, marginTop: spacing.sm,
+    borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.glassBorder,
+  },
+  pLabel: { width: 76, fontSize: 11.5, color: colors.textFaint },
+  pInput: { flex: 1, fontSize: 13, color: colors.text, paddingVertical: spacing.md },
+
+  starRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.md },
+  stars: { flexDirection: 'row', gap: 6, flex: 1 },
+
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
+  chip: {
+    paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: R.pill,
+    backgroundColor: colors.field,
+    borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.glassBorder,
+  },
+  chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  chipText: { fontSize: 12, fontWeight: '700', color: colors.textDim },
+  chipTextActive: { color: colors.textOnAccent },
   actBtnDanger: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: spacing.md, paddingVertical: 7,

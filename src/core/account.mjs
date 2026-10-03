@@ -603,6 +603,134 @@ export async function cancelApplication(session, host, oppId, type = '1', opts =
   }
 }
 
+/* ------------------------------------------------------------ 项目操作 */
+
+/**
+ * 统一的「我的项目」操作请求。
+ *
+ * 三个接口都是同一个套路（实测自 common/opp.my.vol.js）：
+ *   $.post('opp.my.php?m=xxx', C.form.get_form('#div'), cb)
+ *   回调里：code == '1' 走错误分支，否则刷新页面 = 成功。
+ * 所以这里的成功判据是【code !== '1'】。
+ */
+async function postOppAction(session, host, action, params, opts = {}) {
+  const doFetch = opts.fetchImpl || fetch;
+  const url = `${origin(host)}/app/opp/opp.my.php?m=${action}`;
+  const body = new URLSearchParams(params);
+
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), opts.timeoutMs ?? REQUEST_TIMEOUT_MS);
+  let raw = '';
+  try {
+    const res = await doFetch(url, {
+      method: 'POST',
+      headers: {
+        'User-Agent': UA,
+        'Accept-Language': 'zh-CN,zh;q=0.9',
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+        Referer: `${origin(host)}/app/opp/opp.my.php`,
+        ...(session.cookieMode === 'platform' ? {} : { Cookie: session.cookie }),
+      },
+      body: body.toString(),
+      credentials: session.cookieMode === 'platform' ? 'include' : 'omit',
+      signal: ac.signal,
+      redirect: 'follow',
+    });
+    raw = await res.text();
+  } catch (e) {
+    if ((e && e.name === 'AbortError') || /aborted|timeout/i.test(String(e && e.message))) {
+      throw new Error('请求超时，请检查网络后重试');
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+
+  let obj = null;
+  try { obj = JSON.parse(raw); } catch { /* 非 JSON */ }
+  if (!obj) {
+    return { ok: false, message: `服务器返回了无法识别的内容：${textOf(raw).slice(0, 80) || '(空)'}` };
+  }
+  const code = String(obj.code ?? '');
+  const msg = String(obj.msg || '').trim();
+  // code == '1' 是错误分支（站点原文如此），其余视为成功
+  const ok = code !== '1';
+  return { ok, message: msg || (ok ? '操作成功' : '操作失败') };
+}
+
+/**
+ * 更换岗位：先查可选岗位，再提交
+ * @returns {Promise<{oppName:string, jobs:{id:string,name:string}[]}>}
+ */
+export async function fetchJobOptions(session, host, oppId, opts = {}) {
+  const doFetch = opts.fetchImpl || fetch;
+  const url = `${origin(host)}/app/opp/opp.my.php?m=get_oppinfo&opp_id=${encodeURIComponent(oppId)}`;
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), opts.timeoutMs ?? REQUEST_TIMEOUT_MS);
+  try {
+    const res = await doFetch(url, {
+      method: 'POST',
+      headers: {
+        'User-Agent': UA,
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+        Referer: `${origin(host)}/app/opp/opp.my.php`,
+        ...(session.cookieMode === 'platform' ? {} : { Cookie: session.cookie }),
+      },
+      body: '',
+      credentials: session.cookieMode === 'platform' ? 'include' : 'omit',
+      signal: ac.signal,
+      redirect: 'follow',
+    });
+    const t = await res.text();
+    const o = JSON.parse(t);
+    const d = o?.data || {};
+    return {
+      oppName: String(d.opp_name || ''),
+      jobs: Array.isArray(d.jobs)
+        ? d.jobs.map((j) => ({ id: String(j.job_id), name: String(j.job_name) }))
+        : [],
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** 提交更换岗位 */
+export async function changeJob(session, host, oppId, groupId, opts = {}) {
+  if (!groupId || groupId === '0') return { ok: false, message: '请先选择岗位' };
+  return postOppAction(session, host, 'save_change_group', {
+    opp_id: String(oppId), group_id: String(groupId),
+  }, opts);
+}
+
+/** 申请服务时长 */
+export async function applyHour(session, host, oppId, hourNum, memo, opts = {}) {
+  const h = Number(hourNum);
+  if (!Number.isFinite(h) || h <= 0) return { ok: false, message: '请填写正确的小时数（例如 3 或 3.5）' };
+  if (!memo || !String(memo).trim()) return { ok: false, message: '请填写备注（说明什么时候做了什么）' };
+  return postOppAction(session, host, 'save_apply_hour', {
+    opp_id: String(oppId), org_id: '0', hour_num: String(hourNum), memo: String(memo).trim(),
+  }, opts);
+}
+
+/** 评价项目（三个满意度 1-5 星 + 评价内容） */
+export async function submitScore(session, host, oppId, scoreId, scores, content, opts = {}) {
+  const [s1, s2, s3] = scores.map((s) => Number(s));
+  if (![s1, s2, s3].every((s) => Number.isFinite(s) && s >= 1 && s <= 5)) {
+    return { ok: false, message: '请给三项满意度都打分（1-5 星）' };
+  }
+  return postOppAction(session, host, 'save_score', {
+    opp_id: String(oppId),
+    score_id: String(scoreId || '0'),
+    score_org_1: String(s1),
+    score_org_2: String(s2),
+    score_org_3: String(s3),
+    content: String(content || '').trim(),
+  }, opts);
+}
+
 /* ------------------------------------------------------------ 我的团体 */
 
 export function parseMyOrgs(html) {

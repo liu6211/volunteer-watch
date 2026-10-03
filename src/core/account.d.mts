@@ -130,6 +130,44 @@ export function cancelApplication(
   type?: string,
   opts?: { fetchImpl?: typeof fetch; timeoutMs?: number }
 ): Promise<{ ok: boolean; message: string }>;
+/** 查可选岗位（更换岗位前要先拿到岗位列表） */
+export function fetchJobOptions(
+  session: AccountSessionState,
+  host: string,
+  oppId: string,
+  opts?: { fetchImpl?: typeof fetch; timeoutMs?: number }
+): Promise<{ oppName: string; jobs: { id: string; name: string }[] }>;
+
+/** 提交更换岗位 */
+export function changeJob(
+  session: AccountSessionState,
+  host: string,
+  oppId: string,
+  groupId: string,
+  opts?: { fetchImpl?: typeof fetch; timeoutMs?: number }
+): Promise<{ ok: boolean; message: string }>;
+
+/** 申请服务时长 */
+export function applyHour(
+  session: AccountSessionState,
+  host: string,
+  oppId: string,
+  hourNum: string | number,
+  memo: string,
+  opts?: { fetchImpl?: typeof fetch; timeoutMs?: number }
+): Promise<{ ok: boolean; message: string }>;
+
+/** 评价项目 */
+export function submitScore(
+  session: AccountSessionState,
+  host: string,
+  oppId: string,
+  scoreId: string,
+  scores: number[],
+  content: string,
+  opts?: { fetchImpl?: typeof fetch; timeoutMs?: number }
+): Promise<{ ok: boolean; message: string }>;
+
 export function parseMyOrgs(html: string): { items: MyOrg[] };
 export function parseMyHours(html: string): MyHoursResult;
 
