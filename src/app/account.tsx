@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   fetchMyProjects, fetchMyOrgs, fetchMyHours, ACCOUNT_FEATURES, cancelApplication,
-  fetchJobOptions, changeJob, applyHour, submitScore,
+  fetchJobOptions, changeJob, applyHour, submitScore, leaveOrg,
 } from '../core/account.mjs';
 import { SEARCH_HOST } from '../core/search.mjs';
 import { useStore } from '../lib/store';
@@ -53,6 +53,8 @@ export default function AccountScreen() {
   const [expired, setExpired] = useState(false);
   /** 正在取消报名的报名记录编号 */
   const [canceling, setCanceling] = useState('');
+  /** 正在退出团体的团体编号 */
+  const [leaving, setLeaving] = useState('');
   /** 更换岗位 / 申请时长 / 评价 的内联表单 */
   const [panel, setPanel] = useState<Panel>({ kind: '' });
   const [panelBusy, setPanelBusy] = useState(false);
@@ -116,6 +118,43 @@ export default function AccountScreen() {
     // 只在登录用户变化时执行
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account?.loginAt]);
+
+  /**
+   * 退出团体 / 删除申请（站点里叫 del_org_vol）。
+   * status: 2 = 已加入→脱离；1 = 申请中→删除
+   */
+  const onLeaveOrg = (item: { name: string; orgId: string; status: string; actions: { fn: string; args: string[] }[] }) => {
+    const act = item.actions.find((a) => a.fn === 'del_org_vol');
+    const status = act?.args[1] || (item.status.includes('已加入') ? '2' : '1');
+    const isLeave = status === '2';
+
+    Alert.alert(
+      isLeave ? '脱离团体' : '删除申请',
+      isLeave
+        ? `确定退出「${item.name}」吗？\n\n退出后不再属于该团体，需要重新申请加入。`
+        : `确定删除对「${item.name}」的加入申请吗？`,
+      [
+        { text: '再想想', style: 'cancel' },
+        {
+          text: isLeave ? '确定脱离' : '确定删除',
+          style: 'destructive',
+          onPress: async () => {
+            setLeaving(item.orgId);
+            try {
+              await autoLogin().catch(() => undefined);
+              const r = await leaveOrg(accountSession(), SEARCH_HOST, item.orgId, status);
+              Alert.alert(r.ok ? '已处理' : '没成功', r.message);
+              if (r.ok) await load('orgs');
+            } catch (e) {
+              Alert.alert('出错', (e as Error).message);
+            } finally {
+              setLeaving('');
+            }
+          },
+        },
+      ]
+    );
+  };
 
   /**
    * 三个写操作（更换岗位 / 申请时长 / 评价）统一提交：
@@ -550,6 +589,22 @@ export default function AccountScreen() {
                   {it.contact}
                   {it.joinedAt ? ` · 加入于 ${it.joinedAt}` : ''}
                 </Text>
+
+                {/* 脱离团体 / 删除加入申请（站点上 del_org_vol 出现时才显示） */}
+                {it.actions?.some((a: { fn: string }) => a.fn === 'del_org_vol') ? (
+                  <View style={styles.actRow}>
+                    <Tap onPress={() => onLeaveOrg(it)}>
+                      <View style={styles.actBtnDanger}>
+                        <Icon name="exit-outline" size={14} color={colors.danger} />
+                        <Text style={styles.actBtnDangerText}>
+                          {leaving === it.orgId
+                            ? '处理中…'
+                            : (it.status.includes('已加入') ? '脱离团体' : '删除申请')}
+                        </Text>
+                      </View>
+                    </Tap>
+                  </View>
+                ) : null}
               </>
             ) : null}
 

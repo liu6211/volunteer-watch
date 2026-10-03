@@ -731,6 +731,133 @@ export async function submitScore(session, host, oppId, scoreId, scores, content
   }, opts);
 }
 
+/**
+ * 我的团体：取消加入 / 退出团体。
+ *
+ * 接口实测自 https://css.zhiyuanyun.com/common/org.my.js：
+ *   $.post('org.my.php?m=del_org_vol', {status, org_id}, ...)
+ *   code == 0 为成功。
+ *   status: 1=删除（申请中的记录） 2=脱离（已加入的团体）
+ */
+export async function leaveOrg(session, host, orgId, status = '2', opts = {}) {
+  if (!session || !session.cookie) return { ok: false, message: '请先登录志愿云账号' };
+  if (!orgId) return { ok: false, message: '缺少团体编号' };
+
+  const doFetch = opts.fetchImpl || fetch;
+  const url = `${origin(host)}/app/org/org.my.php?m=del_org_vol`;
+  const body = new URLSearchParams({ status: String(status), org_id: String(orgId) });
+
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), opts.timeoutMs ?? REQUEST_TIMEOUT_MS);
+  let raw = '';
+  try {
+    const res = await doFetch(url, {
+      method: 'POST',
+      headers: {
+        'User-Agent': UA,
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+        Referer: `${origin(host)}/app/org/org.my.php`,
+        ...(session.cookieMode === 'platform' ? {} : { Cookie: session.cookie }),
+      },
+      body: body.toString(),
+      credentials: session.cookieMode === 'platform' ? 'include' : 'omit',
+      signal: ac.signal,
+      redirect: 'follow',
+    });
+    raw = await res.text();
+  } catch (e) {
+    if ((e && e.name === 'AbortError') || /aborted|timeout/i.test(String(e && e.message))) {
+      throw new Error('请求超时，请检查网络后重试');
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+
+  let obj = null;
+  try { obj = JSON.parse(raw); } catch { /* 非 JSON */ }
+  const serverOk = obj ? String(obj.code) === '0' : false;
+  const serverMsg = obj ? String(obj.msg || '') : textOf(raw).slice(0, 80);
+
+  // 用「重新拉列表」验证真实结果，不轻信文案
+  try {
+    const after = await fetchMyOrgs(session, host);
+    const still = after.items.some((it) => String(it.orgId) === String(orgId));
+    if (!still) return { ok: true, message: status === '2' ? '已脱离该团体' : '已删除该记录' };
+    return {
+      ok: false,
+      message: serverMsg ? `没有生效：${serverMsg}` : '没有生效，记录还在。请到网站操作。',
+    };
+  } catch {
+    if (serverOk) return { ok: true, message: '服务器已接受，请刷新确认' };
+    return { ok: false, message: serverMsg || '请求已发出，但没能确认结果。请刷新查看。' };
+  }
+}
+
+/* ------------------------------------------------------------ 项目页其它标签 */
+
+/**
+ * 项目的「讨论区 / 项目动态 / 时长公示」。
+ *
+ * 这三个接口都返回【HTML 片段】（站点直接塞进页面某个 div），
+ * 所以这里把片段转成一行行文本给 App 显示。
+ *
+ * 实测自 login.js：
+ *   get_comment(type, id, p) → /app/api/view.php?m=get_comment
+ *   get_track(id, p)         → /app/api/view.php?m=get_track
+ *   get_hour(id, p)          → /app/api/view.php?m=get_hour_list
+ */
+export const OPP_TABS = {
+  comment: { action: 'get_comment', label: '讨论区' },
+  track: { action: 'get_track', label: '项目动态' },
+  hour: { action: 'get_hour_list', label: '时长公示' },
+};
+
+export async function fetchOppTab(session, host, tab, id, page = 1, opts = {}) {
+  const conf = OPP_TABS[tab];
+  if (!conf) throw new Error('未知的标签页');
+
+  const doFetch = opts.fetchImpl || fetch;
+  let url = `${origin(host)}/app/api/view.php?m=${conf.action}&id=${encodeURIComponent(id)}&p=${page}`;
+  // 讨论区还多一个 type 参数（站点调用签名是 get_comment(type, id, p)）
+  if (tab === 'comment') url += `&type=${encodeURIComponent(opts.commentType ?? '1')}`;
+
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), opts.timeoutMs ?? REQUEST_TIMEOUT_MS);
+  try {
+    const res = await doFetch(url, {
+      headers: {
+        'User-Agent': UA,
+        'Accept-Language': 'zh-CN,zh;q=0.9',
+        'X-Requested-With': 'XMLHttpRequest',
+        ...(session && session.cookie
+          ? (session.cookieMode === 'platform' ? {} : { Cookie: session.cookie })
+          : {}),
+      },
+      credentials: session && session.cookieMode === 'platform' ? 'include' : 'omit',
+      signal: ac.signal,
+      redirect: 'follow',
+    });
+    const html = await res.text();
+
+    // 把 HTML 片段转成按行文本；顺带抽出姓名/日期这类结构
+    const lines = textOf(html)
+      .split('\n')
+      .map((s) => s.trim())
+      .filter((s) => s && s !== '&nbsp;')
+      .slice(0, 80);
+
+    return {
+      lines,
+      /** 原始是否为空（没内容） */
+      empty: lines.length === 0 || /暂无|还没有|没有相关/.test(lines.join(' ')),
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /* ------------------------------------------------------------ 我的团体 */
 
 export function parseMyOrgs(html) {
@@ -739,6 +866,11 @@ export function parseMyOrgs(html) {
     const link = firstLink(tds[0]);
     if (!link.text) continue;
     const areaM = tds[0].match(/区域[：:]\s*([^\s<]+)/);
+
+    // 操作列：<a onclick="del_org_vol(6385777,2);">脱离</a>
+    const actions = parseActions(tds[4] || '');
+    const orgId = actions.find((a) => a.args.length)?.args[0] || '';
+
     items.push({
       name: link.text,
       url: link.url,
@@ -746,6 +878,8 @@ export function parseMyOrgs(html) {
       contact: textOf(tds[1] || ''),
       joinedAt: textOf(tds[2] || ''),
       status: textOf(tds[3] || ''),
+      orgId,
+      actions,
     });
   }
   return { items };

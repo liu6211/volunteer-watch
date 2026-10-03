@@ -35,6 +35,9 @@ export interface MyOrg {
   contact: string;
   joinedAt: string;
   status: string;
+  /** 团体编号（onclick 的第一个参数） */
+  orgId: string;
+  actions: MyProjectAction[];
 }
 
 export interface MyHour {
@@ -169,6 +172,28 @@ export function submitScore(
 ): Promise<{ ok: boolean; message: string }>;
 
 export function parseMyOrgs(html: string): { items: MyOrg[] };
+
+/** 退出团体 / 删除申请（会重新拉列表验证真实结果，不轻信文案） */
+export function leaveOrg(
+  session: AccountSessionState,
+  host: string,
+  orgId: string,
+  status?: string,
+  opts?: { fetchImpl?: typeof fetch; timeoutMs?: number }
+): Promise<{ ok: boolean; message: string }>;
+
+/** 项目详情页的其它标签 */
+export const OPP_TABS: Record<string, { action: string; label: string }>;
+
+/** 项目的讨论区 / 项目动态 / 时长公示（接口返回 HTML 片段，这里转成文本行） */
+export function fetchOppTab(
+  session: AccountSessionState | null,
+  host: string,
+  tab: 'comment' | 'track' | 'hour',
+  id: string,
+  page?: number,
+  opts?: { commentType?: string; fetchImpl?: typeof fetch; timeoutMs?: number }
+): Promise<{ lines: string[]; empty: boolean }>;
 export function parseMyHours(html: string): MyHoursResult;
 
 export function checkSession(

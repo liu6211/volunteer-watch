@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { fetchProject, joinProject } from '../../core/project.mjs';
 import type { OppDetail } from '../../core/project.mjs';
+import { fetchOppTab, OPP_TABS } from '../../core/account.mjs';
 import { useStore } from '../../lib/store';
 import { colors, radius as R, spacing, themedStyles } from '../../lib/theme';
 import { Backdrop, Glass, GlassButton, Icon, Tap } from '../../components/ui';
@@ -32,6 +33,26 @@ export default function ProjectDetailScreen() {
   const [error, setError] = useState('');
   const [joining, setJoining] = useState('');
   const [result, setResult] = useState('');
+
+  /** 讨论区 / 项目动态 / 时长公示 */
+  const [extraTab, setExtraTab] = useState<'' | 'comment' | 'track' | 'hour'>('');
+  const [extraLines, setExtraLines] = useState<string[]>([]);
+  const [extraLoading, setExtraLoading] = useState(false);
+
+  const openExtra = async (tab: 'comment' | 'track' | 'hour') => {
+    if (extraTab === tab) { setExtraTab(''); return; }
+    setExtraTab(tab);
+    setExtraLoading(true);
+    setExtraLines([]);
+    try {
+      const r = await fetchOppTab(accountSession(), site, tab, urlId, 1);
+      setExtraLines(r.lines);
+    } catch (e) {
+      setExtraLines([`读取失败：${(e as Error).message}`]);
+    } finally {
+      setExtraLoading(false);
+    }
+  };
 
   const load = useCallback(async () => {
     if (!urlId) { setError('缺少项目编号'); setLoading(false); return; }
@@ -296,6 +317,35 @@ export default function ProjectDetailScreen() {
             <Text style={styles.refreshText}>刷新</Text>
           </View>
         </Tap>
+
+        {/* ---- 讨论区 / 项目动态 / 时长公示 ---- */}
+        <View style={styles.extraTabs}>
+          {(['comment', 'track', 'hour'] as const).map((t) => (
+            <Tap key={t} onPress={() => { void openExtra(t); }} style={{ flex: 1 }}>
+              <View style={[styles.extraTab, extraTab === t && styles.extraTabOn]}>
+                <Text style={[styles.extraTabText, extraTab === t && styles.extraTabTextOn]}>
+                  {OPP_TABS[t].label}
+                </Text>
+              </View>
+            </Tap>
+          ))}
+        </View>
+
+        {extraTab ? (
+          <Glass corner={R.lg} style={styles.card}>
+            {extraLoading ? (
+              <ActivityIndicator color={colors.primary} />
+            ) : extraLines.length === 0 ? (
+              <Text style={styles.extraEmpty}>
+                {extraTab === 'track' ? '这个项目还没有发布动态' : '暂时没有内容'}
+              </Text>
+            ) : (
+              extraLines.map((l, i) => (
+                <Text key={i} style={styles.extraLine}>{l}</Text>
+              ))
+            )}
+          </Glass>
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -353,4 +403,20 @@ const styles = themedStyles(() => StyleSheet.create({
     gap: 5, paddingVertical: spacing.xl,
   },
   refreshText: { fontSize: 11.5, color: colors.textFaint },
+
+  /* 讨论区 / 项目动态 / 时长公示 */
+  extraTabs: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
+  extraTab: {
+    alignItems: 'center', paddingVertical: spacing.md, borderRadius: R.md,
+    backgroundColor: colors.field,
+    borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.glassBorder,
+  },
+  extraTabOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  extraTabText: { fontSize: 12.5, fontWeight: '700', color: colors.textDim },
+  extraTabTextOn: { color: colors.textOnAccent },
+  extraLine: { fontSize: 12.5, color: colors.text, lineHeight: 20, marginBottom: 4 },
+  extraEmpty: {
+    fontSize: 12.5, color: colors.textFaint,
+    textAlign: 'center', paddingVertical: spacing.lg,
+  },
 }));
