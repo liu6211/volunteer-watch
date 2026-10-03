@@ -7,10 +7,16 @@ on:
 
 jobs:
   build-ios-unsigned:
-    # macos-26 默认带 Xcode 26.6；macos-15 只有到 26.3，
-    # 而 expo-modules-jsi 在 26.3 上会因 Swift 严格并发诊断报错。
-    # 详见下面 Patch 步骤的注释。
-    runs-on: macos-26
+    # ⚠️ 2026-10-03：macos-26 这个标签已经排不上机器了 ——
+    # 任务 4 秒就失败，runner 为空、steps=0，连第一步都没跑。
+    # 换到 macos-15（自带 Xcode 26.3）。
+    #
+    # 历史上 macos-15 的 Xcode 26.3 会让 expo-modules-jsi 因
+    # Swift 严格并发诊断报错，所以下面保留了 perl 补丁那一步。
+    #
+    # 需要 Xcode 版本更高时，可换成 macos-latest 或 macos-15-large，
+    # 并确认 /Applications/Xcode_26*.app 存在。
+    runs-on: macos-15
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
