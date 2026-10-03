@@ -427,7 +427,7 @@ export default function SettingsScreen() {
             <Row
               icon="phone-portrait-outline"
               title="上岛（灵动岛 / 锁屏倒计时）"
-              subtitle="服务进行时在锁屏和灵动岛显示剩余时间。需要原生扩展，Expo Go 里不生效"
+              subtitle="服务期间在锁屏和灵动岛显示剩余时间。iOS 独占，Expo Go 里不生效"
               right={
                 <Switch
                   value={s.liveActivityEnabled}
@@ -438,8 +438,10 @@ export default function SettingsScreen() {
             />
             <Divider inset={64} />
             <Text style={styles.hint}>
-              实测说明：实时活动由原生 Widget 扩展提供，Expo Go 无法运行。
-              关掉这个开关时，服务提醒仍会通过普通通知送达，不受影响。
+              实时活动用官方 expo-widgets 实现（无需原生代码）。
+              它只在 iOS 生效，且【Expo Go 里一定不行】——
+              必须用 development build 或正式包，重新安装后才看得到。
+              关掉这个开关不影响服务提醒，提醒走的是普通通知。
             </Text>
           </Glass>
         </>

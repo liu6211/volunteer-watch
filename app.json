@@ -17,7 +17,8 @@
         ],
         "BGTaskSchedulerPermittedIdentifiers": [
           "com.expo.modules.backgroundtask.processing"
-        ]
+        ],
+        "NSSupportsLiveActivities": true
       }
     },
     "android": {
@@ -41,7 +42,13 @@
           "color": "#2E7D32"
         }
       ],
-      "expo-background-task"
+      "expo-background-task",
+      [
+        "expo-widgets",
+        {
+          "groupIdentifier": "group.com.liu.volunteerwatch"
+        }
+      ]
     ],
     "extra": {
       "router": {},

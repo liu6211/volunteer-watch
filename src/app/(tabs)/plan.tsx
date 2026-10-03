@@ -4,7 +4,7 @@
  * 和「更多 → 我的排班」是同一份数据，只是放到了一级入口。
  * 需要登录志愿云账号。
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator, ScrollView, StyleSheet, Text, View,
 } from 'react-native';
@@ -17,6 +17,10 @@ import { useStore } from '../../lib/store';
 import { colors, radius as R, spacing, themedStyles } from '../../lib/theme';
 import { Backdrop, Glass, GlassButton, Icon, Tap } from '../../components/ui';
 import { parseShifts, scheduleShiftReminders, cancelShiftReminders } from '../../lib/reminders';
+import {
+  shouldUseLiveActivity, startShiftActivity, endShiftActivity,
+  hasRunningActivity, isLiveActivityAvailable,
+} from '../../lib/liveActivity';
 
 export default function PlanScreen() {
   const { state, accountSession, autoLogin, updateSettings } = useStore();
@@ -28,6 +32,60 @@ export default function PlanScreen() {
   const [error, setError] = useState('');
   /** 提醒排布结果，显示在页面上让用户看得见 */
   const [reminderNote, setReminderNote] = useState('');
+  /** 上岛状态提示 */
+  const [liveNote, setLiveNote] = useState('');
+  const [liveBusy, setLiveBusy] = useState(false);
+
+  /** 排班列表（页面渲染与上岛都用它） */
+  const shifts = useMemo(() => parseShifts(headers, rows), [headers, rows]);
+
+  /**
+   * 当前时间。
+   * 不能在渲染期直接调 Date.now()（React Compiler 会报「渲染期调用非纯函数」），
+   * 所以放进 effect 里取一次，shifts 变化时刷新。
+   */
+  const [nowMs, setNowMs] = useState(0);
+  useEffect(() => {
+    void Promise.resolve().then(() => setNowMs(Date.now()));
+  }, [shifts]);
+
+  /** 挑一条最该计时的排班：进行中的优先，否则最近一条未来的 */
+  const targetShift = useMemo(() => {
+    if (shifts.length === 0) return null;
+    if (!nowMs) return shifts[0];
+    const running = shifts.find(
+      (s) => s.startAt.getTime() <= nowMs && (s.endAt ? s.endAt.getTime() > nowMs : true)
+    );
+    if (running) return running;
+    return shifts
+      .filter((s) => s.startAt.getTime() > nowMs)
+      .sort((a, b) => a.startAt.getTime() - b.startAt.getTime())[0] ?? shifts[0];
+  }, [shifts, nowMs]);
+
+  /**
+   * 上岛：把当前排班的倒计时显示到锁屏 / 灵动岛。
+   * 设置里关掉 liveActivityEnabled 时不做任何事（只走普通提醒）。
+   */
+  const onToggleLive = async () => {
+    setLiveBusy(true);
+    try {
+      if (hasRunningActivity()) {
+        await endShiftActivity();
+        setLiveNote('已结束锁屏倒计时');
+        return;
+      }
+      if (!targetShift) {
+        setLiveNote('当前没有可计时的排班');
+        return;
+      }
+      const r = await startShiftActivity(targetShift);
+      setLiveNote(r.message);
+    } catch (e) {
+      setLiveNote(`上岛出错：${(e as Error).message}`);
+    } finally {
+      setLiveBusy(false);
+    }
+  };
 
   /** 拉到排班后顺手把提醒重排一遍（幂等：先清后建） */
   const syncReminders = useCallback(
@@ -152,6 +210,30 @@ export default function PlanScreen() {
               <Icon name="notifications-outline" size={15} color={colors.primary} />
               <Text style={styles.noteText}>{reminderNote}</Text>
             </View>
+          </Glass>
+        ) : null}
+
+        {/* 上岛：把服务倒计时显示到锁屏 / 灵动岛 */}
+        {state.settings.liveActivityEnabled ? (
+          <Glass corner={R.md} style={styles.noteCard}>
+            <View style={styles.noteRow}>
+              <Icon name="phone-portrait-outline" size={15} color={colors.primary} />
+              <Text style={styles.noteText}>
+                {liveNote || (isLiveActivityAvailable()
+                  ? '实时活动已就绪：服务期间可在锁屏和灵动岛看剩余时间'
+                  : '当前环境不支持上岛（Expo Go 或非 iOS），需要 development build')}
+              </Text>
+            </View>
+            {targetShift ? (
+              <GlassButton
+                label={hasRunningActivity() ? '结束锁屏倒计时' : `上岛计时：${targetShift.title}`}
+                icon="timer-outline"
+                variant="primary"
+                loading={liveBusy}
+                onPress={() => { void onToggleLive(); }}
+                style={{ marginTop: spacing.md }}
+              />
+            ) : null}
           </Glass>
         ) : null}
 
