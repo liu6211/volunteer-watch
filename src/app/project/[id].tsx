@@ -79,7 +79,13 @@ export default function ProjectDetailScreen() {
     setExtraLines([]);
     setExtraItems([]);
     try {
-      const r = await fetchOppTab(accountSession(), site, tab, urlId, 1);
+      /*
+       * ⚠️ 必须用【数字项目编号】（页面里 opp_join(数字,...) 那个），
+       * 不能用路由里的加密链接 id —— 服务器收到无效 id 时不报错，
+       * 而是返回【全站最新评论】，看起来就成了「讨论区总是同几个人」。
+       */
+      const apiId = data?.oppId || urlId;
+      const r = await fetchOppTab(accountSession(), site, tab, apiId, 1);
       setExtraItems(r.items);
       setExtraLines(r.lines);
     } catch (e) {

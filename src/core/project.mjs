@@ -194,7 +194,6 @@ export async function joinProject(session, host, oppId, jobId, opts = {}) {
   }
 
   const doFetch = opts.fetchImpl || fetch;
-  const url = `https://${host}/app/api/view.php?m=opp_join`;
   const body = new URLSearchParams({
     opp_id: String(oppId),
     job_id: String(jobId),
@@ -202,22 +201,26 @@ export async function joinProject(session, host, oppId, jobId, opts = {}) {
   if (opts.oppPwd) body.set('opp_pwd', opts.oppPwd);
   if (opts.answer) body.set('answer', opts.answer);
 
+  /*
+   * 站点会拦掉 POST 并回「访问超时」，所以写操作必须用 GET、参数放 URL 上。
+   * ⚠️ URL 一定要在上面几个 body.set 之后才拼，否则会漏掉参数。
+   */
+  const url = `https://${host}/app/api/view.php?m=opp_join&${body.toString()}`;
+
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), opts.timeoutMs ?? REQUEST_TIMEOUT_MS);
   try {
     const res = await doFetch(url, {
-      method: 'POST',
+      method: 'GET',
       headers: {
         'User-Agent': UA,
         'Accept-Language': 'zh-CN,zh;q=0.9',
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
         'X-Requested-With': 'XMLHttpRequest',
         Referer: `https://${host}/app/opp/view.php?id=${oppId}`,
         ...(session.cookieMode === 'manual' || !session.cookieMode
           ? { Cookie: session.cookie }
           : {}),
       },
-      body: body.toString(),
       credentials: session.cookieMode === 'platform' ? 'include' : 'omit',
       signal: ac.signal,
       redirect: 'follow',
@@ -225,7 +228,7 @@ export async function joinProject(session, host, oppId, jobId, opts = {}) {
 
     const raw = await res.text();
     let obj = null;
-    try { obj = JSON.parse(raw); } catch { /* 非 JSON */ }
+    try { obj = JSON.parse(raw.replace(/^\uFEFF/, "").trim()); } catch { /* 非 JSON */ }
 
     if (!obj) {
       const txt = textOf(raw).slice(0, 120);

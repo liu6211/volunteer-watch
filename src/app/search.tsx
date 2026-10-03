@@ -41,6 +41,11 @@ export default function SearchScreen() {
   const [addingId, setAddingId] = useState('');
   /** 正在加入的团体（linkId） */
   const [joiningId, setJoiningId] = useState('');
+  /**
+   * 已加入过的团体。站点回「已加入」这类提示时记下来，
+   * 按钮随即变成「已加入」，避免用户以为还能再点。
+   */
+  const [joinedIds, setJoinedIds] = useState<string[]>([]);
 
   const history = state.searchHistory ?? [];
 
@@ -113,6 +118,10 @@ export default function SearchScreen() {
             try {
               await autoLogin().catch(() => undefined);
               const r = await joinOrg(accountSession(), HOST, item.linkId);
+              // 已加入 / 已申请 都记下来，按钮变成「已加入」
+              if (r.ok || /已加入|已申请|已在|重复/.test(r.message)) {
+                setJoinedIds((prev) => (prev.includes(item.linkId) ? prev : [...prev, item.linkId]));
+              }
               Alert.alert(r.ok ? '已提交' : '没能加入', r.message);
             } catch (e) {
               Alert.alert('出错', (e as Error).message);
@@ -144,16 +153,23 @@ export default function SearchScreen() {
           ) : (
             <View style={styles.btnGroup}>
               {/* 真正加入这个团体（需要登录志愿云账号） */}
-              <Tap onPress={() => { void onJoinOrg(item); }} disabled={joiningId === item.linkId}>
-                <View style={styles.joinBtn}>
-                  {joiningId === item.linkId
-                    ? <ActivityIndicator size="small" color={colors.primary} />
-                    : <Icon name="person-add-outline" size={14} color={colors.primary} />}
-                  <Text style={styles.joinBtnText}>
-                    {joiningId === item.linkId ? '加入中' : '加入'}
-                  </Text>
+              {joinedIds.includes(item.linkId) ? (
+                <View style={styles.joinedBtn}>
+                  <Icon name="checkmark-circle" size={14} color={colors.textFaint} />
+                  <Text style={styles.joinedBtnText}>已加入</Text>
                 </View>
-              </Tap>
+              ) : (
+                <Tap onPress={() => { void onJoinOrg(item); }} disabled={joiningId === item.linkId}>
+                  <View style={styles.joinBtn}>
+                    {joiningId === item.linkId
+                      ? <ActivityIndicator size="small" color={colors.primary} />
+                      : <Icon name="person-add-outline" size={14} color={colors.primary} />}
+                    <Text style={styles.joinBtnText}>
+                      {joiningId === item.linkId ? '加入中' : '加入'}
+                    </Text>
+                  </View>
+                </Tap>
+              )}
               {/* 只加入监控列表，不去站点报名 */}
               <Tap onPress={() => { void onAdd(item); }}>
                 <View style={styles.addBtn}>
@@ -363,6 +379,13 @@ const styles = themedStyles(() => StyleSheet.create({
     borderRadius: R.pill,
   },
   joinBtnText: { fontSize: 12, color: colors.primary, fontWeight: '800' },
+  joinedBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: colors.subtle,
+    paddingHorizontal: spacing.md, paddingVertical: 7,
+    borderRadius: R.pill,
+  },
+  joinedBtnText: { fontSize: 12, color: colors.textFaint, fontWeight: '700' },
   addBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 3,
     backgroundColor: colors.primary,

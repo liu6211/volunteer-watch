@@ -203,7 +203,7 @@ export async function checkNeedCaptcha(session, host, username, opts = {}) {
   const res = await req(session, url, { method: 'GET', fetchImpl: opts.fetchImpl });
   const text = await res.text();
   let obj = null;
-  try { obj = JSON.parse(text); } catch { /* 非 JSON */ }
+  try { obj = JSON.parse(text.replace(/^\uFEFF/, "").trim()); } catch { /* 非 JSON */ }
 
   const message = obj && obj.show
     ? String(obj.show).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
@@ -246,6 +246,12 @@ async function loginOnce(host, username, password, captcha, cookieMode, fetchImp
   body.set('referer', '/app/user/home.php');
   body.set('uyzm', captcha || '');
 
+  /*
+   * ⚠️ 登录这一个必须是 POST。
+   * 站点确实会拦 `/app/api/` 下的 POST（回「访问超时」），
+   * 但 login.php?m=login 的 POST 是正常的 —— 实测两者行为不同，
+   * 所以只有这里保留 POST，别的地方一律用 GET。
+   */
   const res = await req(session, `${base}/app/user/login.php?m=login`, {
     method: 'POST',
     fetchImpl,
@@ -261,7 +267,7 @@ async function loginOnce(host, username, password, captcha, cookieMode, fetchImp
   const text = await res.text();
   let obj = null;
   try {
-    obj = JSON.parse(text);
+    obj = JSON.parse(text.replace(/^\uFEFF/, "").trim());
   } catch {
     const mm = text.match(/\{[\s\S]*\}/);
     if (mm) {
@@ -525,24 +531,23 @@ export async function cancelApplication(session, host, oppId, type = '1', opts =
   //      $.post('opp.my.php?m=del_opp_vol', {status, opp_id}, ...)
   //    注意不是 /app/api/view.php —— 之前那个是猜的，猜错了。
   const doFetch = opts.fetchImpl || fetch;
-  const url = `${origin(host)}/app/opp/opp.my.php?m=del_opp_vol`;
   const body = new URLSearchParams({ status: String(type), opp_id: String(oppId) });
+  /* 站点会拦掉 POST 并回「访问超时」，所以写操作也必须用 GET，参数放 URL 上 */
+  const url = `${origin(host)}/app/opp/opp.my.php?m=del_opp_vol` + (`${origin(host)}/app/opp/opp.my.php?m=del_opp_vol`.includes('?') ? '&' : '?') + body.toString();
 
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), opts.timeoutMs ?? REQUEST_TIMEOUT_MS);
   let raw = '';
   try {
     const res = await doFetch(url, {
-      method: 'POST',
+      method: 'GET',
       headers: {
         'User-Agent': UA,
         'Accept-Language': 'zh-CN,zh;q=0.9',
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
         'X-Requested-With': 'XMLHttpRequest',
         Referer: `${origin(host)}/app/opp/opp.my.php`,
         ...(session.cookieMode === 'platform' ? {} : { Cookie: session.cookie }),
       },
-      body: body.toString(),
       credentials: session.cookieMode === 'platform' ? 'include' : 'omit',
       signal: ac.signal,
       redirect: 'follow',
@@ -560,7 +565,7 @@ export async function cancelApplication(session, host, oppId, type = '1', opts =
   let serverMsg = '';
   let serverOk = false;
   try {
-    const o = JSON.parse(raw);
+    const o = JSON.parse(raw.replace(/^\uFEFF/, "").trim());
     serverMsg = String(o.msg || '');
     // 站点这个接口 code==0 表示成功（实测自 opp.my.vol.js 里的判断）
     serverOk = String(o.code) === '0';
@@ -573,12 +578,12 @@ export async function cancelApplication(session, host, oppId, type = '1', opts =
     const after = await fetchMyProjects(session, host);
     const still = after.items.some((it) => String(it.oppId) === String(oppId));
 
+    if (before === false) {
+      // 这条记录本来就不在列表里 —— 说明编号不对，不能算成功
+      return { ok: false, message: '没有找到这条报名记录（可能已被处理）' };
+    }
     if (!still) {
       return { ok: true, message: '已取消报名' };
-    }
-    if (before === false) {
-      // 本来就不在列表里（可能已经被处理过）
-      return { ok: true, message: '这条报名记录已经不在了' };
     }
     // 记录还在 = 没成功。优先用服务器原话，没有就如实说明
     return {
@@ -616,24 +621,23 @@ export async function cancelApplication(session, host, oppId, type = '1', opts =
  */
 async function postOppAction(session, host, action, params, opts = {}) {
   const doFetch = opts.fetchImpl || fetch;
-  const url = `${origin(host)}/app/opp/opp.my.php?m=${action}`;
   const body = new URLSearchParams(params);
+  /* 站点会拦掉 POST 并回「访问超时」，所以写操作也必须用 GET，参数放 URL 上 */
+  const url = `${origin(host)}/app/opp/opp.my.php?m=${action}` + (`${origin(host)}/app/opp/opp.my.php?m=${action}`.includes('?') ? '&' : '?') + body.toString();
 
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), opts.timeoutMs ?? REQUEST_TIMEOUT_MS);
   let raw = '';
   try {
     const res = await doFetch(url, {
-      method: 'POST',
+      method: 'GET',
       headers: {
         'User-Agent': UA,
         'Accept-Language': 'zh-CN,zh;q=0.9',
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
         'X-Requested-With': 'XMLHttpRequest',
         Referer: `${origin(host)}/app/opp/opp.my.php`,
         ...(session.cookieMode === 'platform' ? {} : { Cookie: session.cookie }),
       },
-      body: body.toString(),
       credentials: session.cookieMode === 'platform' ? 'include' : 'omit',
       signal: ac.signal,
       redirect: 'follow',
@@ -649,7 +653,7 @@ async function postOppAction(session, host, action, params, opts = {}) {
   }
 
   let obj = null;
-  try { obj = JSON.parse(raw); } catch { /* 非 JSON */ }
+  try { obj = JSON.parse(raw.replace(/^\uFEFF/, "").trim()); } catch { /* 非 JSON */ }
   if (!obj) {
     return { ok: false, message: `服务器返回了无法识别的内容：${textOf(raw).slice(0, 80) || '(空)'}` };
   }
@@ -671,21 +675,19 @@ export async function fetchJobOptions(session, host, oppId, opts = {}) {
   const timer = setTimeout(() => ac.abort(), opts.timeoutMs ?? REQUEST_TIMEOUT_MS);
   try {
     const res = await doFetch(url, {
-      method: 'POST',
+      method: 'GET',
       headers: {
         'User-Agent': UA,
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
         'X-Requested-With': 'XMLHttpRequest',
         Referer: `${origin(host)}/app/opp/opp.my.php`,
         ...(session.cookieMode === 'platform' ? {} : { Cookie: session.cookie }),
       },
-      body: '',
       credentials: session.cookieMode === 'platform' ? 'include' : 'omit',
       signal: ac.signal,
       redirect: 'follow',
     });
     const t = await res.text();
-    const o = JSON.parse(t);
+    const o = JSON.parse(t.replace(/^\uFEFF/, "").trim());
     const d = o?.data || {};
     return {
       oppName: String(d.opp_name || ''),
@@ -744,24 +746,30 @@ export async function leaveOrg(session, host, orgId, status = '2', opts = {}) {
   if (!session || !session.cookie) return { ok: false, message: '请先登录志愿云账号' };
   if (!orgId) return { ok: false, message: '缺少团体编号' };
 
+  // 记录操作前这条记录是否存在，避免用错编号时误报成功
+  let before = null;
+  try {
+    const r0 = await fetchMyOrgs(session, host);
+    before = r0.items.some((it) => String(it.orgId) === String(orgId));
+  } catch { /* 忽略 */ }
+
   const doFetch = opts.fetchImpl || fetch;
-  const url = `${origin(host)}/app/org/org.my.php?m=del_org_vol`;
   const body = new URLSearchParams({ status: String(status), org_id: String(orgId) });
+  /* 站点会拦掉 POST 并回「访问超时」，所以写操作也必须用 GET，参数放 URL 上 */
+  const url = `${origin(host)}/app/org/org.my.php?m=del_org_vol` + (`${origin(host)}/app/org/org.my.php?m=del_org_vol`.includes('?') ? '&' : '?') + body.toString();
 
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), opts.timeoutMs ?? REQUEST_TIMEOUT_MS);
   let raw = '';
   try {
     const res = await doFetch(url, {
-      method: 'POST',
+      method: 'GET',
       headers: {
         'User-Agent': UA,
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
         'X-Requested-With': 'XMLHttpRequest',
         Referer: `${origin(host)}/app/org/org.my.php`,
         ...(session.cookieMode === 'platform' ? {} : { Cookie: session.cookie }),
       },
-      body: body.toString(),
       credentials: session.cookieMode === 'platform' ? 'include' : 'omit',
       signal: ac.signal,
       redirect: 'follow',
@@ -777,7 +785,7 @@ export async function leaveOrg(session, host, orgId, status = '2', opts = {}) {
   }
 
   let obj = null;
-  try { obj = JSON.parse(raw); } catch { /* 非 JSON */ }
+  try { obj = JSON.parse(raw.replace(/^\uFEFF/, "").trim()); } catch { /* 非 JSON */ }
   const serverOk = obj ? String(obj.code) === '0' : false;
   const serverMsg = obj ? String(obj.msg || '') : textOf(raw).slice(0, 80);
 
@@ -785,7 +793,8 @@ export async function leaveOrg(session, host, orgId, status = '2', opts = {}) {
   try {
     const after = await fetchMyOrgs(session, host);
     const still = after.items.some((it) => String(it.orgId) === String(orgId));
-    if (!still) return { ok: true, message: status === '2' ? '已脱离该团体' : '已删除该记录' };
+    if (!still && before !== false) return { ok: true, message: status === '2' ? '已脱离该团体' : '已删除该记录' };
+    if (!still && before === false) return { ok: false, message: '没有找到这条记录（可能已被处理）' };
     return {
       ok: false,
       message: serverMsg ? `没有生效：${serverMsg}` : '没有生效，记录还在。请到网站操作。',
@@ -929,23 +938,24 @@ export async function postComment(session, host, params, opts = {}) {
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), opts.timeoutMs ?? REQUEST_TIMEOUT_MS);
   try {
-    const res = await doFetch(`${origin(host)}/app/api/view.php?m=do_reply`, {
-      method: 'POST',
-      headers: {
-        'User-Agent': UA,
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+    // 站点拦 POST，写操作必须用 GET，参数拼在 URL 上
+    const res = await doFetch(
+      `${origin(host)}/app/api/view.php?m=do_reply&${body.toString()}`,
+      {
+        method: 'GET',
+        headers: {
+          'User-Agent': UA,
         'X-Requested-With': 'XMLHttpRequest',
         Referer: `${origin(host)}/app/opp/view.php`,
         ...(session.cookieMode === 'platform' ? {} : { Cookie: session.cookie }),
       },
-      body: body.toString(),
       credentials: session.cookieMode === 'platform' ? 'include' : 'omit',
       signal: ac.signal,
       redirect: 'follow',
     });
     const raw = await res.text();
     let obj = null;
-    try { obj = JSON.parse(raw); } catch { /* 非 JSON */ }
+    try { obj = JSON.parse(raw.replace(/^\uFEFF/, "").trim()); } catch { /* 非 JSON */ }
     if (!obj) {
       return { ok: false, message: `服务器返回了无法识别的内容：${textOf(raw).slice(0, 80) || '(空)'}` };
     }
@@ -997,16 +1007,17 @@ export async function joinOrg(session, host, linkId, opts = {}) {
   const timer = setTimeout(() => ac.abort(), opts.timeoutMs ?? REQUEST_TIMEOUT_MS);
   let raw = '';
   try {
-    const res = await doFetch(`${origin(host)}/app/api/view.php?m=org_join`, {
-      method: 'POST',
+    // 站点拦 POST，写操作必须用 GET，参数拼在 URL 上
+    const res = await doFetch(
+      `${origin(host)}/app/api/view.php?m=org_join&${body.toString()}`,
+      {
+      method: 'GET',
       headers: {
         'User-Agent': UA,
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
         'X-Requested-With': 'XMLHttpRequest',
         Referer: `${origin(host)}/app/org/view.php?id=${encodeURIComponent(linkId)}`,
         ...(session.cookieMode === 'platform' ? {} : { Cookie: session.cookie }),
       },
-      body: body.toString(),
       credentials: session.cookieMode === 'platform' ? 'include' : 'omit',
       signal: ac.signal,
       redirect: 'follow',
@@ -1023,7 +1034,7 @@ export async function joinOrg(session, host, linkId, opts = {}) {
 
   let msg = '';
   try {
-    const o = JSON.parse(raw);
+    const o = JSON.parse(raw.replace(/^\uFEFF/, "").trim());
     msg = String(o.msg || '');
   } catch {
     msg = textOf(raw).slice(0, 100);

@@ -136,9 +136,10 @@ test('joinProject: 成功时解析 msg', async () => {
   assert.match(r.message, /报名成功/);
 
   const { url, opts } = calls[0];
-  assert.match(url, /\/app\/api\/view\.php\?m=opp_join$/);
-  assert.equal(opts.method, 'POST');
-  const body = new URLSearchParams(opts.body);
+  assert.match(url, /\/app\/api\/view\.php\?m=opp_join/);
+  // 站点会拦掉 POST 并回「访问超时」，所以写操作必须用 GET，参数放在 URL 上
+  assert.equal(opts.method, 'GET');
+  const body = new URLSearchParams(url.split('?')[1]);
   assert.equal(body.get('opp_id'), '9713283');
   assert.equal(body.get('job_id'), '11418895');
   // 必须带上登录会话，否则服务器不认
@@ -150,6 +151,15 @@ test('joinProject: 服务器说失败时 ok=false 并带上原话', async () => 
   const r = await joinProject(SESSION, 'gz.zhiyuanyun.com', '1', '2', { fetchImpl: fn });
   assert.equal(r.ok, false);
   assert.match(r.message, /重复报名/);
+});
+
+test('joinProject: 必须用 GET 且参数在 URL 上（站点拦 POST）', async () => {
+  const { fn, calls } = fakeJoin('{"msg":"报名成功"}');
+  await joinProject(SESSION, 'gz.zhiyuanyun.com', '1', '2', { fetchImpl: fn });
+  assert.equal(calls[0].opts.method, 'GET', '写操作必须用 GET');
+  assert.ok(!calls[0].opts.body, 'GET 不能带 body');
+  assert.match(calls[0].url, /opp_id=1/);
+  assert.match(calls[0].url, /job_id=2/);
 });
 
 test('joinProject: 没登录时直接拒绝，不发请求', async () => {
@@ -179,7 +189,7 @@ test('joinProject: 需要免审密码/回答问题时能带上', async () => {
   await joinProject(SESSION, 'gz.zhiyuanyun.com', '1', '2', {
     fetchImpl: fn, oppPwd: 'secret', answer: '我的回答',
   });
-  const body = new URLSearchParams(calls[0].opts.body);
+  const body = new URLSearchParams(calls[0].url.split('?')[1]);
   assert.equal(body.get('opp_pwd'), 'secret');
   assert.equal(body.get('answer'), '我的回答');
 });
