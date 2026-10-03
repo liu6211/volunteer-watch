@@ -77,8 +77,19 @@ export default function TeamDetailScreen() {
 
   const renderProject = ({ item, index }: { item: OppItem; index: number }) => {
     const sc = statusColor(item.status);
+    // 项目链接形如 /app/opp/view.php?id=xxxx，取出 id 进 App 内的详情页
+    const oppId = (String(item.url).match(/[?&]id=([^&\s]+)/) || [, ''])[1];
     return (
-      <Tap onPress={() => { void Linking.openURL(item.url); }} style={styles.projWrap}>
+      <Tap
+        onPress={() => {
+          if (oppId) {
+            router.push(`/project/${encodeURIComponent(oppId)}?host=${watch.host}`);
+          } else {
+            void Linking.openURL(item.url);
+          }
+        }}
+        style={styles.projWrap}
+      >
         <Glass corner={R.md} style={styles.proj}>
           <View style={styles.projRow}>
             <View style={styles.projIndex}>
@@ -96,7 +107,7 @@ export default function TeamDetailScreen() {
                 ) : null}
               </View>
             </View>
-            <Icon name="open-outline" size={14} color={colors.textFaint} />
+            <Icon name="chevron-forward" size={14} color={colors.textFaint} />
           </View>
         </Glass>
       </Tap>

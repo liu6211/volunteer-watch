@@ -21,6 +21,7 @@ import { colors, getScheme, radius as R, spacing, themedStyles } from '../../lib
 /** 每个标签对应一个扁平图标（选中/未选中两态） */
 const TAB_META: Record<string, { label: string; on: IconName; off: IconName }> = {
   index: { label: '团体', on: 'people', off: 'people-outline' },
+  plan: { label: '排班', on: 'calendar', off: 'calendar-outline' },
   notifications: { label: '通知', on: 'notifications', off: 'notifications-outline' },
   settings: { label: '设置', on: 'settings', off: 'settings-outline' },
 };
@@ -161,6 +162,7 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen name="index" options={{ title: '团体' }} />
+      <Tabs.Screen name="plan" options={{ title: '排班' }} />
       <Tabs.Screen name="notifications" options={{ title: '通知' }} />
       <Tabs.Screen name="settings" options={{ title: '设置' }} />
     </Tabs>
@@ -171,7 +173,9 @@ const styles = themedStyles(() => StyleSheet.create({
   wrap: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
-    backgroundColor: 'transparent',
+    // 垫一层主题底色：万一渐变没铺到这里（安全区、圆角外），
+    // 也不会露出导航器自带的那层浅色底
+    backgroundColor: colors.bg,
   },
   bar: { width: '100%' },
   row: {

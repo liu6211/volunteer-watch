@@ -111,6 +111,10 @@ function ThemedApp() {
             options={{ headerShown: true, title: '' }}
           />
           <Stack.Screen
+            name="project/[id]"
+            options={{ headerShown: true, title: '项目详情' }}
+          />
+          <Stack.Screen
             name="help-email"
             options={{ headerShown: true, title: '邮箱通知怎么配' }}
           />
