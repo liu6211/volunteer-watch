@@ -8,9 +8,11 @@ import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Platform } from 'react-native';
+import { Platform, View } from 'react-native';
 
 import { StoreProvider } from '../lib/store';
+import { Backdrop } from '../components/ui';
+import { colors } from '../lib/theme';
 
 /**
  * 点击通知时跳转到通知页。
@@ -51,25 +53,36 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <StoreProvider>
         <StatusBar style="dark" />
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen
-            name="team/[id]"
-            options={{
-              headerShown: true,
-              title: '团体详情',
+        {/* 全局渐变背景：所有页面都是透明的，玻璃面板靠它出效果 */}
+        <View style={{ flex: 1 }}>
+          <Backdrop />
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              // 头部也是玻璃材质，压住内容时更好看
+              headerTransparent: true,
+              headerBlurEffect: 'systemUltraThinMaterialLight',
+              headerTintColor: colors.primary,
+              headerTitleStyle: { fontSize: 16, fontWeight: '700', color: colors.text },
               headerBackTitle: '返回',
+              contentStyle: { backgroundColor: 'transparent' },
             }}
-          />
-          <Stack.Screen
-            name="help-email"
-            options={{
-              headerShown: true,
-              title: '邮箱通知怎么配',
-              headerBackTitle: '返回',
-            }}
-          />
-        </Stack>
+          >
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen
+              name="team/[id]"
+              options={{ headerShown: true, title: '团体详情' }}
+            />
+            <Stack.Screen
+              name="add"
+              options={{ headerShown: true, title: '添加团体' }}
+            />
+            <Stack.Screen
+              name="help-email"
+              options={{ headerShown: true, title: '邮箱通知怎么配' }}
+            />
+          </Stack>
+        </View>
       </StoreProvider>
     </SafeAreaProvider>
   );

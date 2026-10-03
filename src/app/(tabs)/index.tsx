@@ -1,25 +1,32 @@
 /**
  * 团体列表页 —— 应用主界面
+ * 液态玻璃风格：渐变背景 + 玻璃卡片 + 扁平图标
  */
 import React, { useCallback, useState } from 'react';
 import {
-  ActivityIndicator, Alert, FlatList, RefreshControl, StyleSheet, Switch,
-  Text, TouchableOpacity, View,
+  ActivityIndicator, Alert, FlatList, RefreshControl, StyleSheet,
+  Switch, Text, View,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useStore, displayName, siteLabel } from '../../lib/store';
-import { colors, radius, spacing, timeAgo } from '../../lib/theme';
+import { colors, radius as R, spacing, timeAgo, glassShadow } from '../../lib/theme';
 import type { WatchItem } from '../../lib/types';
+import { Glass, GlassButton, Icon, Tap } from '../../components/ui';
 
 export default function TeamsScreen() {
-  const { ready, state, checking, lastRunMessage, checkAll, setWatchEnabled, removeWatch } = useStore();
+  const { ready, state, checking, lastRunMessage, checkAll, setWatchEnabled, removeWatch } =
+    useStore();
 
-  // 从添加页返回时刷新一下（状态本身是全局的，这里主要为了重新渲染）
+  const insets = useSafeAreaInsets();
+
+  // 从详情页返回时刷新一下
   const [, setTick] = useState(0);
   useFocusEffect(useCallback(() => { setTick((t) => t + 1); }, []));
 
   const watches = state.watches;
+
   /** 最近一次检查时间 = 所有监控项里最新的那个 */
   const lastCheckedAt = watches
     .map((w) => w.lastCheckedAt)
@@ -29,9 +36,9 @@ export default function TeamsScreen() {
 
   /**
    * 顶部状态文案。
-   * lastRunMessage 只存在于内存里，App 一重载就没了；而 lastResult 是持久化的。
-   * 所以内存为空时要回退到「最近检查过的那个团体」的结果，
-   * 否则会出现「明明卡片显示有结果，顶部却说从未检查过」的矛盾。
+   * lastRunMessage 只存在内存里，App 一重载就没了；lastResult 是持久化的。
+   * 内存为空时回退到「最近检查过的那个团体」的结果，
+   * 否则会出现「卡片有结果，顶部却说从未检查过」的矛盾。
    */
   const mostRecentResult = watches
     .filter((w) => w.lastCheckedAt && w.lastResult)
@@ -41,11 +48,8 @@ export default function TeamsScreen() {
     ? '正在检查…'
     : lastRunMessage || mostRecentResult || '还没检查过，点下方按钮检查';
 
-  /** 把间隔分钟数写成「15 分钟 / 1 小时 / 3 小时」 */
-  const intervalLabel = (m: number) =>
-    m % 60 === 0 ? `${m / 60} 小时` : `${m} 分钟`;
+  const intervalLabel = (m: number) => (m % 60 === 0 ? `${m / 60} 小时` : `${m} 分钟`);
 
-  /** 自动检查开着且有启用的团体时，给个可见提示，否则用户不知道它在跑 */
   const autoCheckHint =
     state.settings.backgroundCheckEnabled && watches.some((w) => w.enabled)
       ? ` · 每 ${intervalLabel(state.settings.intervalMinutes)}自动检查`
@@ -65,89 +69,111 @@ export default function TeamsScreen() {
   const renderItem = ({ item }: { item: WatchItem }) => {
     const latest = item.projects[0];
     return (
-      <TouchableOpacity
-        style={[styles.card, !item.enabled && styles.cardDisabled]}
-        activeOpacity={0.7}
+      <Tap
         onPress={() => router.push(`/team/${item.id}`)}
         onLongPress={() => onDelete(item)}
+        style={styles.cardWrap}
       >
-        <View style={styles.cardHeader}>
-          <View style={{ flex: 1, paddingRight: spacing.sm }}>
-            <Text style={styles.cardTitle} numberOfLines={1}>{displayName(item)}</Text>
-            <Text style={styles.cardSub} numberOfLines={1}>
-              {siteLabel(item.host)} · {item.projects.length} 个项目
-              {item.alias ? ` · ${item.name}` : ''}
-            </Text>
+        <Glass corner={R.lg} style={item.enabled ? undefined : styles.cardOff}>
+          <View style={styles.cardHead}>
+            <View style={styles.cardHeadText}>
+              <Text style={styles.cardTitle} numberOfLines={1}>{displayName(item)}</Text>
+              <View style={styles.metaRow}>
+                <Icon name="pricetag-outline" size={12} color={colors.textFaint} />
+                <Text style={styles.cardSub} numberOfLines={1}>
+                  {siteLabel(item.host)} · {item.projects.length} 个项目
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={item.enabled}
+              onValueChange={(v) => { void setWatchEnabled(item.id, v); }}
+              trackColor={{ true: colors.primary, false: colors.track }}
+            />
           </View>
-          <Switch
-            value={item.enabled}
-            onValueChange={(v) => { void setWatchEnabled(item.id, v); }}
-            trackColor={{ true: colors.primary, false: '#CFD4DA' }}
-          />
-        </View>
 
-        {latest ? (
-          <View style={styles.latestBox}>
-            <Text style={styles.latestLabel}>最新项目</Text>
-            <Text style={styles.latestName} numberOfLines={2}>{latest.name}</Text>
-            <Text style={styles.latestDate}>
-              {latest.date || '日期未知'}{latest.status ? ` · ${latest.status}` : ''}
+          {latest ? (
+            <View style={styles.latestBox}>
+              <View style={styles.latestHead}>
+                <Icon name="sparkles-outline" size={12} color={colors.primary} />
+                <Text style={styles.latestLabel}>最新项目</Text>
+              </View>
+              <Text style={styles.latestName} numberOfLines={2}>{latest.name}</Text>
+              <Text style={styles.latestDate}>
+                {latest.date || '日期未知'}{latest.status ? ` · ${latest.status}` : ''}
+              </Text>
+            </View>
+          ) : null}
+
+          <View style={styles.cardFoot}>
+            <Icon
+              name={item.lastResult?.startsWith('检查失败') ? 'alert-circle-outline' : 'checkmark-circle-outline'}
+              size={13}
+              color={item.lastResult?.startsWith('检查失败') ? colors.warn : colors.textFaint}
+            />
+            <Text style={styles.footText} numberOfLines={1}>
+              {item.lastResult || '尚未检查'}
             </Text>
+            <Text style={styles.footTime}>{timeAgo(item.lastCheckedAt)}</Text>
           </View>
-        ) : null}
-
-        <View style={styles.cardFooter}>
-          <Text style={styles.footerText} numberOfLines={1}>
-            {item.lastResult || '尚未检查'}
-          </Text>
-          <Text style={styles.footerTime}>{timeAgo(item.lastCheckedAt)}</Text>
-        </View>
-      </TouchableOpacity>
+        </Glass>
+      </Tap>
     );
   };
 
   const empty = (
-    <View style={styles.empty}>
-      <Text style={styles.emptyEmoji}>📋</Text>
+    <Glass corner={R.xl} style={styles.emptyCard}>
+      <View style={styles.emptyIcon}>
+        <Icon name="albums-outline" size={30} color={colors.primary} />
+      </View>
       <Text style={styles.emptyTitle}>还没有监控任何团体</Text>
       <Text style={styles.emptyText}>
-        点下面的按钮，把志愿云团体页的链接粘进来即可。{'\n'}
-        例如：https://gz.zhiyuanyun.com/app/org/view.php?id=xxx
+        点下面的按钮，把志愿云团体页的链接粘进来即可
       </Text>
-    </View>
+      <Text style={styles.emptyHint}>
+        gz.zhiyuanyun.com/app/org/view.php?id=…
+      </Text>
+    </Glass>
   );
 
   return (
     <View style={styles.screen}>
-      {/* 状态条：让「检查了没有、结果如何」一眼可见 */}
-      <View style={[styles.statusBar, checking && styles.statusBarBusy]}>
-        {checking ? (
-          <ActivityIndicator size="small" color={colors.primary} />
-        ) : (
-          <Text style={styles.statusIcon}>
-            {(lastRunMessage || mostRecentResult) ? '✅' : 'ℹ️'}
-          </Text>
-        )}
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.statusText, checking && { color: colors.primary }]}>
-            {statusText}
-          </Text>
-          {!checking ? (
-            <Text style={styles.statusTime}>
-              {lastCheckedAt ? `上次检查：${timeAgo(lastCheckedAt)}` : '还没有检查记录'}
-              {autoCheckHint}
-            </Text>
-          ) : null}
-        </View>
-      </View>
-
       <FlatList
         data={watches}
         keyExtractor={(w) => w.id}
         renderItem={renderItem}
-        contentContainerStyle={watches.length === 0 ? styles.listEmpty : styles.list}
+        contentContainerStyle={[
+          styles.list,
+          { paddingTop: insets.top + 56, paddingBottom: 170 },
+        ]}
+        ListHeaderComponent={
+          <View style={styles.header}>
+            <Text style={styles.pageTitle}>监控的团体</Text>
+            <Glass corner={R.md} style={styles.statusCard} intensity={40}>
+              <View style={styles.statusRow}>
+                {checking ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Icon
+                    name={(lastRunMessage || mostRecentResult) ? 'checkmark-circle' : 'information-circle'}
+                    size={18}
+                    color={(lastRunMessage || mostRecentResult) ? colors.primary : colors.info}
+                  />
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.statusText}>{statusText}</Text>
+                  {!checking ? (
+                    <Text style={styles.statusTime}>
+                      {lastCheckedAt ? `上次检查：${timeAgo(lastCheckedAt)}` : '还没有检查记录'}
+                      {autoCheckHint}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+            </Glass>
+          </View>
+        }
         ListEmptyComponent={ready ? empty : null}
-        /* iOS 上内容不满一屏时，默认不可回弹，下拉刷新的动画就出不来 */
         alwaysBounceVertical
         refreshControl={
           <RefreshControl
@@ -155,104 +181,103 @@ export default function TeamsScreen() {
             onRefresh={() => { void checkAll(); }}
             tintColor={colors.primary}
             colors={[colors.primary]}
-            title={checking ? '正在检查…' : '下拉即可检查'}
-            titleColor={colors.textDim}
+            progressViewOffset={insets.top + 40}
           />
         }
       />
 
-      <View style={styles.actions}>
-        <TouchableOpacity
-          style={[styles.btn, styles.btnSecondary]}
+      {/* 底部悬浮操作条（避开自绘标签栏） */}
+      <View style={[styles.actions, { bottom: 96 + insets.bottom }]} pointerEvents="box-none">
+        <GlassButton
+          label={checking ? '' : '立即检查'}
+          icon={checking ? undefined : 'refresh'}
+          loading={checking}
+          variant="glass"
           onPress={() => { void checkAll(); }}
-          disabled={checking || watches.length === 0}
-        >
-          {checking ? (
-            <ActivityIndicator color={colors.primary} />
-          ) : (
-            <Text style={styles.btnSecondaryText}>立即检查</Text>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.btn, styles.btnPrimary]}
-          onPress={() => router.push('/(tabs)/add')}
-        >
-          <Text style={styles.btnPrimaryText}>+ 添加团体</Text>
-        </TouchableOpacity>
+          disabled={watches.length === 0}
+          style={styles.actionBtn}
+        />
+        <GlassButton
+          label="添加团体"
+          icon="add"
+          variant="primary"
+          onPress={() => router.push('/add')}
+          style={styles.actionBtn}
+        />
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  statusBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.card,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  statusBarBusy: { backgroundColor: colors.primaryDim },
-  statusIcon: { fontSize: 14 },
-  statusText: { fontSize: 13, fontWeight: '600', color: colors.text },
-  statusTime: { fontSize: 11, color: colors.textDim, marginTop: 2 },
-  list: { padding: spacing.lg, paddingBottom: spacing.xl },
-  listEmpty: { flexGrow: 1, justifyContent: 'center', padding: spacing.xl },
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: radius.md,
-    padding: spacing.lg,
+  screen: { flex: 1, backgroundColor: 'transparent' },
+
+  list: { paddingHorizontal: spacing.lg },
+
+  header: { marginBottom: spacing.md },
+  pageTitle: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: colors.text,
     marginBottom: spacing.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    letterSpacing: 0.2,
   },
-  cardDisabled: { opacity: 0.55 },
-  cardHeader: { flexDirection: 'row', alignItems: 'center' },
-  cardTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
-  cardSub: { fontSize: 12, color: colors.textDim, marginTop: 2 },
+  statusCard: { width: '100%' },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  statusText: { fontSize: 13.5, fontWeight: '700', color: colors.text },
+  statusTime: { fontSize: 11.5, color: colors.textDim, marginTop: 3 },
+
+  cardWrap: { marginBottom: spacing.md, borderRadius: R.lg },
+  cardOff: { opacity: 0.55 },
+  cardHead: { flexDirection: 'row', alignItems: 'center' },
+  cardHeadText: { flex: 1, paddingRight: spacing.sm },
+  cardTitle: { fontSize: 16.5, fontWeight: '800', color: colors.text },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
+  cardSub: { fontSize: 11.5, color: colors.textDim },
+
   latestBox: {
     marginTop: spacing.md,
-    backgroundColor: colors.bg,
-    borderRadius: radius.sm,
+    backgroundColor: 'rgba(255,255,255,0.5)',
+    borderRadius: R.sm,
     padding: spacing.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.7)',
   },
-  latestLabel: { fontSize: 11, color: colors.textFaint, marginBottom: 2 },
-  latestName: { fontSize: 14, color: colors.text, fontWeight: '600' },
-  latestDate: { fontSize: 11, color: colors.textDim, marginTop: 3 },
-  cardFooter: {
+  latestHead: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 3 },
+  latestLabel: { fontSize: 10.5, color: colors.textFaint, fontWeight: '600' },
+  latestName: { fontSize: 14, color: colors.text, fontWeight: '700', lineHeight: 20 },
+  latestDate: { fontSize: 11, color: colors.textDim, marginTop: 4 },
+
+  cardFoot: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 5,
     marginTop: spacing.md,
   },
-  footerText: { flex: 1, fontSize: 11, color: colors.textDim, paddingRight: spacing.sm },
-  footerTime: { fontSize: 11, color: colors.textFaint },
-  empty: { alignItems: 'center' },
-  emptyEmoji: { fontSize: 44, marginBottom: spacing.md },
-  emptyTitle: { fontSize: 16, fontWeight: '700', color: colors.text, marginBottom: spacing.sm },
+  footText: { flex: 1, fontSize: 11, color: colors.textDim },
+  footTime: { fontSize: 11, color: colors.textFaint },
+
+  emptyCard: { alignItems: 'center', marginTop: spacing.xl },
+  emptyIcon: {
+    width: 64, height: 64, borderRadius: 32,
+    backgroundColor: colors.primaryDim,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: spacing.lg,
+  },
+  emptyTitle: { fontSize: 16, fontWeight: '800', color: colors.text, marginBottom: spacing.sm },
   emptyText: { fontSize: 13, color: colors.textDim, textAlign: 'center', lineHeight: 20 },
+  emptyHint: {
+    fontSize: 11, color: colors.info, marginTop: spacing.md,
+    backgroundColor: colors.infoDim, paddingHorizontal: spacing.md, paddingVertical: 6,
+    borderRadius: R.sm, overflow: 'hidden',
+  },
+
   actions: {
+    position: 'absolute',
+    left: spacing.lg,
+    right: spacing.lg,
     flexDirection: 'row',
-    padding: spacing.lg,
     gap: spacing.md,
-    backgroundColor: colors.card,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
   },
-  btn: {
-    flex: 1,
-    height: 46,
-    borderRadius: radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  btnPrimary: { backgroundColor: colors.primary },
-  btnPrimaryText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  btnSecondary: { backgroundColor: colors.primaryDim },
-  btnSecondaryText: { color: colors.primary, fontSize: 15, fontWeight: '700' },
+  actionBtn: { flex: 1, ...glassShadow },
 });

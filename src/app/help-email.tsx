@@ -9,8 +9,10 @@ import {
   Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { Stack } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, radius, spacing } from '../lib/theme';
+import { Glass, GroupTitle, Icon } from '../components/ui';
 
 /* ------------------------------------------------------------------ 小组件 */
 
@@ -66,7 +68,7 @@ function Collapsible({
       <TouchableOpacity style={styles.cardHead} onPress={() => setOpen((v) => !v)}>
         <Text style={styles.cardTitle}>{title}</Text>
         {badge ? <Text style={styles.badge}>{badge}</Text> : null}
-        <Text style={styles.chev}>{open ? '收起' : '展开'}</Text>
+        <Icon name={open ? 'chevron-up' : 'chevron-down'} size={16} color={colors.info} />
       </TouchableOpacity>
       {open ? <View style={styles.cardBody}>{children}</View> : null}
     </View>
@@ -84,26 +86,30 @@ function Link({ url, label }: { url: string; label: string }) {
 /* ------------------------------------------------------------------ 页面 */
 
 export default function EmailHelpScreen() {
+  const insets = useSafeAreaInsets();
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + 64 }]}
+    >
       <Stack.Screen options={{ title: '邮箱通知怎么配' }} />
 
       <Section title="先搞清楚一件事">
         <P>
-          这个 App 装在手机上，**不能直接连 QQ 邮箱发信**。
-          因为发邮件需要原始网络套接字（socket），而手机 App 的运行环境不提供，
-          要直连就得引入原生代码 —— 那些库都已经很久没人维护了，硬加会把打包搞坏。
+          这个 App 装在手机上，<Text style={styles.b}>不能直接连 QQ 邮箱发信</Text>。
+          因为发邮件需要原始网络套接字（socket），而手机 App 的运行环境不提供；
+          能直连的第三方库都已经很久没人维护，硬加会把打包搞坏。
         </P>
         <P>
-          所以走「HTTP 发送通道」。下面三条路任选一条，**推荐第 2 条（Brevo）**，
-          因为它不需要你有服务器。
+          所以走「HTTP 发送通道」。下面三条路任选一条，
+          <Text style={styles.b}>推荐第 2 条（Brevo）</Text>，因为它不需要你有服务器。
         </P>
       </Section>
 
       {/* ------------------------------------------------ 授权码 */}
       <Section title="QQ 邮箱的「授权码」怎么拿">
         <P>
-          你记得的那个「密钥」就是授权码。它**不是**你的 QQ 登录密码，
+          你记得的那个「密钥」就是授权码。它<Text style={styles.b}>不是</Text>你的 QQ 登录密码，
           是专门给第三方程序用的 16 位串。
         </P>
         <Step n={1}>电脑浏览器打开 QQ 邮箱网页版，登录。</Step>
@@ -162,7 +168,7 @@ export default function EmailHelpScreen() {
             注册：<Link url="https://www.brevo.com" label="brevo.com" />
           </Step>
           <Step n={2}>
-            进入后台 → <Text style={styles.b}>Senders & IP</Text> → 添加你**自己的 QQ 邮箱**为发件人，
+            进入后台 → <Text style={styles.b}>Senders & IP</Text> → 添加你<Text style={styles.b}>自己的 QQ 邮箱</Text>为发件人，
             然后去 QQ 邮箱点确认链接完成验证。
           </Step>
           <Step n={3}>
@@ -232,7 +238,7 @@ export default function EmailHelpScreen() {
       {/* ------------------------------------------------ 安全 */}
       <Section title="关于安全">
         <P>
-          API Key 和授权码保存在**你手机本地的应用数据**里（AsyncStorage），
+          API Key 和授权码保存在<Text style={styles.b}>你手机本地的应用数据</Text>里（AsyncStorage），
           不会上传到任何地方。但它是明文存的，手机被别人拿到就可能看到。
         </P>
         <P>
@@ -247,8 +253,8 @@ export default function EmailHelpScreen() {
 /* ------------------------------------------------------------------ 样式 */
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.lg, paddingBottom: spacing.xl * 2 },
+  screen: { flex: 1, backgroundColor: 'transparent' },
+  content: { padding: spacing.lg, paddingBottom: spacing.xxl * 2 },
 
   section: { marginBottom: spacing.xl },
   sectionTitle: {
