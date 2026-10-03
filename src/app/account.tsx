@@ -61,14 +61,6 @@ export default function AccountScreen() {
   const [panel, setPanel] = useState<Panel>({ kind: '' });
   const [panelBusy, setPanelBusy] = useState(false);
 
-  /*
-   * 提交类操作都跳浏览器完成，用户切回来时数据已经变了，
-   * 这里自动刷新当前这一栏，省得手动下拉。
-   */
-  useRefreshOnReturn(() => {
-    if (state.account && !loading) void load(tab, true);
-  });
-
   const load = useCallback(
     async (which: Tab, isRefresh = false) => {
       if (!account) return;
@@ -99,6 +91,15 @@ export default function AccountScreen() {
     },
     [account, accountSession, markAccountSynced]
   );
+
+  /*
+   * 提交类操作都跳浏览器完成，用户切回来时数据已经变了，
+   * 这里自动刷新当前这一栏，省得手动下拉。
+   * （必须放在 load 之后 —— 放在前面会被编译器判定为「先于声明使用」）
+   */
+  useRefreshOnReturn(() => {
+    if (account) void load(tab, true);
+  });
 
   // 进页面时校验一次会话，再拉当前分页的数据
   useEffect(() => {

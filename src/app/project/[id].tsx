@@ -48,8 +48,8 @@ export default function ProjectDetailScreen() {
    * 所以这里不再需要输入状态和提交函数。
    */
 
-  /* 从浏览器（报名/发评论）切回来时自动刷新一次 */
-  useRefreshOnReturn(() => { void load(); });
+  /* 从浏览器（报名/发评论）切回来时自动刷新一次。
+     必须放在 load 之后 —— 放在前面会被编译器判定为「先于声明使用」。 */
 
   const openExtra = async (tab: 'comment' | 'track' | 'hour') => {
     if (extraTab === tab) { setExtraTab(''); return; }
@@ -86,6 +86,9 @@ export default function ProjectDetailScreen() {
       setLoading(false);
     }
   }, [site, urlId]);
+
+  /* 从浏览器（报名/发评论）切回来时自动刷新一次 */
+  useRefreshOnReturn(() => { void load(); });
 
   useEffect(() => {
     let alive = true;
