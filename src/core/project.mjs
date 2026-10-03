@@ -15,6 +15,48 @@
 const UA =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
 
+/*
+ * ⚠️ 为什么不用原生 URLSearchParams：
+ * React Native 里的 polyfill 对「用对象初始化」支持不完整，
+ * new QS({a:1}) 在手机上会得到空串 —— 参数全丢，
+ * 于是所有「需要发数据」的按钮都会失败（报「请选择岗位」之类），
+ * 而 Node 里完全正常，本地测不出来。所以自己实现一个。
+ */
+class QS {
+  constructor(init) {
+    this._p = [];
+    if (typeof init === 'string') {
+      for (const kv of init.replace(/^\?/, '').split('&')) {
+        if (!kv) continue;
+        const i = kv.indexOf('=');
+        const k = i < 0 ? kv : kv.slice(0, i);
+        const v = i < 0 ? '' : kv.slice(i + 1);
+        this._p.push([decodeURIComponent(k), decodeURIComponent(v)]);
+      }
+    } else if (init && typeof init === 'object') {
+      for (const k of Object.keys(init)) {
+        if (init[k] === undefined || init[k] === null) continue;
+        this._p.push([k, String(init[k])]);
+      }
+    }
+  }
+  set(k, v) {
+    this._p = this._p.filter(([a]) => a !== k);
+    this._p.push([String(k), String(v)]);
+  }
+  append(k, v) { this._p.push([String(k), String(v)]); }
+  get(k) {
+    const f = this._p.find(([a]) => a === k);
+    return f ? f[1] : null;
+  }
+  has(k) { return this._p.some(([a]) => a === k); }
+  toString() {
+    return this._p
+      .map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v))
+      .join('&');
+  }
+}
+
 const REQUEST_TIMEOUT_MS = 25000;
 
 /** @typedef {{ index:number, title:string, plan:number|null, joined:number|null, jobId:string, desc:string, condition:string }} OppPost */
@@ -194,7 +236,7 @@ export async function joinProject(session, host, oppId, jobId, opts = {}) {
   }
 
   const doFetch = opts.fetchImpl || fetch;
-  const body = new URLSearchParams({
+  const body = new QS({
     opp_id: String(oppId),
     job_id: String(jobId),
   });

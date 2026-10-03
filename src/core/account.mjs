@@ -24,6 +24,48 @@ import { resolveStableOrgId } from './search.mjs';
 const UA =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
 
+/*
+ * ⚠️ 为什么不用原生 URLSearchParams：
+ * React Native 里的 polyfill 对「用对象初始化」支持不完整，
+ * new QS({a:1}) 在手机上会得到空串 —— 参数全丢，
+ * 于是所有「需要发数据」的按钮都会失败（报「请选择岗位」之类），
+ * 而 Node 里完全正常，本地测不出来。所以自己实现一个。
+ */
+class QS {
+  constructor(init) {
+    this._p = [];
+    if (typeof init === 'string') {
+      for (const kv of init.replace(/^\?/, '').split('&')) {
+        if (!kv) continue;
+        const i = kv.indexOf('=');
+        const k = i < 0 ? kv : kv.slice(0, i);
+        const v = i < 0 ? '' : kv.slice(i + 1);
+        this._p.push([decodeURIComponent(k), decodeURIComponent(v)]);
+      }
+    } else if (init && typeof init === 'object') {
+      for (const k of Object.keys(init)) {
+        if (init[k] === undefined || init[k] === null) continue;
+        this._p.push([k, String(init[k])]);
+      }
+    }
+  }
+  set(k, v) {
+    this._p = this._p.filter(([a]) => a !== k);
+    this._p.push([String(k), String(v)]);
+  }
+  append(k, v) { this._p.push([String(k), String(v)]); }
+  get(k) {
+    const f = this._p.find(([a]) => a === k);
+    return f ? f[1] : null;
+  }
+  has(k) { return this._p.some(([a]) => a === k); }
+  toString() {
+    return this._p
+      .map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v))
+      .join('&');
+  }
+}
+
 /** 登录页里的 RSA 公钥（站点换密钥时只需更新这里） */
 export const SITE_PUBKEY =
   '-----BEGIN PUBLIC KEY-----\n' +
@@ -239,7 +281,7 @@ async function loginOnce(host, username, password, captcha, cookieMode, fetchImp
   //    而它是拿 input 的 id 当键、按 DOM 顺序遍历的。
   //    ⚠️ uyzm（验证码框）在页面上一直存在（只是隐藏），
   //    所以浏览器即使没有验证码也会提交一个空串 —— 这里必须照做。
-  const body = new URLSearchParams();
+  const body = new QS();
   body.set('seid', session.seid);
   body.set('uname', username);
   body.set('upass', encPass);
@@ -531,7 +573,7 @@ export async function cancelApplication(session, host, oppId, type = '1', opts =
   //      $.post('opp.my.php?m=del_opp_vol', {status, opp_id}, ...)
   //    注意不是 /app/api/view.php —— 之前那个是猜的，猜错了。
   const doFetch = opts.fetchImpl || fetch;
-  const body = new URLSearchParams({ status: String(type), opp_id: String(oppId) });
+  const body = new QS({ status: String(type), opp_id: String(oppId) });
   /* 站点会拦掉 POST 并回「访问超时」，所以写操作也必须用 GET，参数放 URL 上 */
   const url = `${origin(host)}/app/opp/opp.my.php?m=del_opp_vol` + (`${origin(host)}/app/opp/opp.my.php?m=del_opp_vol`.includes('?') ? '&' : '?') + body.toString();
 
@@ -621,7 +663,7 @@ export async function cancelApplication(session, host, oppId, type = '1', opts =
  */
 async function postOppAction(session, host, action, params, opts = {}) {
   const doFetch = opts.fetchImpl || fetch;
-  const body = new URLSearchParams(params);
+  const body = new QS(params);
   /* 站点会拦掉 POST 并回「访问超时」，所以写操作也必须用 GET，参数放 URL 上 */
   const url = `${origin(host)}/app/opp/opp.my.php?m=${action}` + (`${origin(host)}/app/opp/opp.my.php?m=${action}`.includes('?') ? '&' : '?') + body.toString();
 
@@ -754,7 +796,7 @@ export async function leaveOrg(session, host, orgId, status = '2', opts = {}) {
   } catch { /* 忽略 */ }
 
   const doFetch = opts.fetchImpl || fetch;
-  const body = new URLSearchParams({ status: String(status), org_id: String(orgId) });
+  const body = new QS({ status: String(status), org_id: String(orgId) });
   /* 站点会拦掉 POST 并回「访问超时」，所以写操作也必须用 GET，参数放 URL 上 */
   const url = `${origin(host)}/app/org/org.my.php?m=del_org_vol` + (`${origin(host)}/app/org/org.my.php?m=del_org_vol`.includes('?') ? '&' : '?') + body.toString();
 
@@ -927,7 +969,7 @@ export async function postComment(session, host, params, opts = {}) {
   if (!content) return { ok: false, message: '评论内容不能为空' };
 
   const doFetch = opts.fetchImpl || fetch;
-  const body = new URLSearchParams({
+  const body = new QS({
     comment_type: String(params.commentType ?? '1'),
     source_id: String(params.sourceId ?? ''),
     content,
@@ -1001,7 +1043,7 @@ export async function joinOrg(session, host, linkId, opts = {}) {
 
   // 2. 提交加入
   const doFetch = opts.fetchImpl || fetch;
-  const body = new URLSearchParams({ org_id: orgId });
+  const body = new QS({ org_id: orgId });
 
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), opts.timeoutMs ?? REQUEST_TIMEOUT_MS);
