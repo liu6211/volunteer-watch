@@ -16,15 +16,41 @@ import { SEARCH_HOST } from '../../core/search.mjs';
 import { useStore } from '../../lib/store';
 import { colors, radius as R, spacing, themedStyles } from '../../lib/theme';
 import { Backdrop, Glass, GlassButton, Icon, Tap } from '../../components/ui';
+import { parseShifts, scheduleShiftReminders, cancelShiftReminders } from '../../lib/reminders';
 
 export default function PlanScreen() {
-  const { state, accountSession, autoLogin } = useStore();
+  const { state, accountSession, autoLogin, updateSettings } = useStore();
   const insets = useSafeAreaInsets();
 
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<string[][]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  /** 提醒排布结果，显示在页面上让用户看得见 */
+  const [reminderNote, setReminderNote] = useState('');
+
+  /** 拉到排班后顺手把提醒重排一遍（幂等：先清后建） */
+  const syncReminders = useCallback(
+    async (hdrs: string[], body: string[][], settings = state.settings) => {
+      const shifts = parseShifts(hdrs, body);
+      if (shifts.length === 0) {
+        await cancelShiftReminders();
+        setReminderNote(settings.shiftReminderEnabled ? '当前没有排班，已清掉旧提醒' : '');
+        return;
+      }
+      try {
+        const r = await scheduleShiftReminders(shifts, settings);
+        setReminderNote(
+          settings.shiftReminderEnabled
+            ? `已为 ${shifts.length} 条排班安排 ${r.scheduled} 条提醒`
+            : `检测到 ${shifts.length} 条排班（提醒未开启）`
+        );
+      } catch (e) {
+        setReminderNote(`提醒安排失败：${(e as Error).message}`);
+      }
+    },
+    [state.settings]
+  );
 
   const load = useCallback(async () => {
     if (!state.account) return;
@@ -45,6 +71,8 @@ export default function PlanScreen() {
       const t = await fetchGenericPage(accountSession(), SEARCH_HOST, '/app/user/plan.php');
       setHeaders(t.headers);
       setRows(t.rows);
+      // 拿到排班就顺手重排提醒（幂等，先清后建）
+      await syncReminders(t.headers, t.rows);
     } catch (e) {
       const msg = (e as Error).message;
       // 万一重登之后还是过期，再补一次，仍然不行就如实报错
@@ -55,6 +83,7 @@ export default function PlanScreen() {
             const t = await fetchGenericPage(accountSession(), SEARCH_HOST, '/app/user/plan.php');
             setHeaders(t.headers);
             setRows(t.rows);
+            await syncReminders(t.headers, t.rows);
             return;
           } catch (e2) {
             setError((e2 as Error).message);
@@ -66,7 +95,7 @@ export default function PlanScreen() {
     } finally {
       setLoading(false);
     }
-  }, [state.account, accountSession, autoLogin]);
+  }, [state.account, accountSession, autoLogin, syncReminders]);
 
   useEffect(() => {
     let alive = true;
@@ -115,6 +144,16 @@ export default function PlanScreen() {
         ]}
       >
         <Text style={styles.title}>我的排班</Text>
+
+        {/* 提醒排布结果 —— 让用户看得见「到底排了几条提醒」 */}
+        {reminderNote ? (
+          <Glass corner={R.md} style={styles.noteCard}>
+            <View style={styles.noteRow}>
+              <Icon name="notifications-outline" size={15} color={colors.primary} />
+              <Text style={styles.noteText}>{reminderNote}</Text>
+            </View>
+          </Glass>
+        ) : null}
 
         {loading ? (
           <View style={styles.loading}>
@@ -184,6 +223,9 @@ const styles = themedStyles(() => StyleSheet.create({
   errorRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   errorText: { flex: 1, fontSize: 12.5, color: colors.danger, lineHeight: 18 },
 
+  noteCard: { marginBottom: spacing.md },
+  noteRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  noteText: { flex: 1, fontSize: 12, color: colors.textDim, lineHeight: 17 },
   rowCard: { marginBottom: spacing.sm, gap: spacing.sm },
   cellRow: { flexDirection: 'row', gap: spacing.md },
   cellLabel: { width: 76, fontSize: 11.5, color: colors.textFaint },

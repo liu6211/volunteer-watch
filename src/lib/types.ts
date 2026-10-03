@@ -78,6 +78,27 @@ export interface AppSettings {
   /** 界面主题（可手动切换，不再只跟随系统） */
   themeMode: ThemeMode;
 
+  /* ---------------------------------------------------- 排班提醒 */
+  /**
+   * 根据「我的排班」里的开始日期自动排定时提醒。
+   * 用本地定时通知实现 —— App 关掉也会响，不依赖实时活动。
+   */
+  shiftReminderEnabled: boolean;
+  /** 提前几天提醒（0 = 当天） */
+  shiftReminderDaysAhead: number;
+  /** 当天几点提醒（0-23），只在 daysAhead=0 时用；提前提醒固定在 20:00 */
+  shiftReminderHour: number;
+
+  /* ---------------------------------------------------- iOS 实时活动 */
+  /**
+   * 是否「上岛」：把正在进行的服务显示在锁屏 / 灵动岛（Live Activity）。
+   *
+   * 这需要原生 Widget 扩展，**Expo Go 里一定不生效**，
+   * 只有 development build / 正式包才行。所以单独做成开关，
+   * 关掉时只走普通的定时通知。
+   */
+  liveActivityEnabled: boolean;
+
   /* ---------------------------------------------------- 邮箱通知 */
   /** 邮箱通知开关 */
   emailEnabled: boolean;
@@ -146,6 +167,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
   intervalMinutes: 15,
   backgroundCheckEnabled: true,
   themeMode: 'system',
+
+  shiftReminderEnabled: false,
+  shiftReminderDaysAhead: 1,
+  shiftReminderHour: 7,
+
+  // 默认关闭：需要原生扩展，Expo Go 里不会生效，让用户自己决定
+  liveActivityEnabled: false,
 
   emailEnabled: false,
   emailTo: '',

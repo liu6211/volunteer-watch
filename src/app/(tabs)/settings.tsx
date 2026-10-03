@@ -1,7 +1,7 @@
 /**
  * 设置页 —— 液态玻璃风格
  */
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert, Platform, ScrollView, StyleSheet, Switch, Text, TextInput, View,
 } from 'react-native';
@@ -21,6 +21,7 @@ import {
   PROVIDER_LABELS, mailConfigFromSettings, validateMailConfig, sendTestMail,
 } from '../../lib/email';
 import * as Device from 'expo-device';
+import { countShiftReminders, cancelShiftReminders } from '../../lib/reminders';
 import {
   Backdrop, Badge, Divider, Glass, GlassButton, GroupTitle, Icon, Tap, type IconName,
 } from '../../components/ui';
@@ -82,6 +83,46 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
 
   const [perm, setPerm] = useState<boolean | null>(null);
+
+  /* ------------------------------------------------ 排班提醒 */
+  const [reminderCount, setReminderCount] = useState<number | null>(null);
+
+  const refreshReminderCount = useCallback(async () => {
+    try {
+      setReminderCount(await countShiftReminders());
+    } catch {
+      setReminderCount(null);
+    }
+  }, []);
+
+  // 用 Promise.resolve().then 延后到下一个微任务：
+  // 直接在 effect 里调用会触发「synchronously setState」告警（本项目统一这样写）
+  useEffect(() => {
+    void Promise.resolve().then(() => refreshReminderCount());
+  }, [refreshReminderCount, s.shiftReminderEnabled]);
+
+  /**
+   * 重新排一遍提醒。
+   * 排班的正文要现拉，这里不重复请求站点，只清空并提示去排班页刷新 ——
+   * 排班页每次进入都会自动重排，所以那里才是权威入口。
+   */
+  const onReschedule = () => {
+    Alert.alert(
+      '重新安排提醒',
+      '提醒会在你打开「排班」页时按最新排班自动重排。\n\n要现在清空所有已排的提醒吗？',
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '清空并重排',
+          onPress: async () => {
+            await cancelShiftReminders();
+            await refreshReminderCount();
+            Alert.alert('已清空', '打开「排班」页即会按最新排班重新安排。');
+          },
+        },
+      ]
+    );
+  };
 
   /* 文本框用本地 state，失焦时才写回设置，避免每敲一个字就存一次 */
   const [emailTo, setEmailTo] = useState(s.emailTo);
@@ -308,6 +349,101 @@ export default function SettingsScreen() {
           onPress={() => { void dismissAll(); }}
         />
       </Glass>
+
+      {/* ------------------------------------------------ 排班提醒 */}
+      <GroupTitle>排班提醒</GroupTitle>
+      <Glass corner={R.lg} padded={false}>
+        <Row
+          icon="alarm-outline"
+          title="服务提醒"
+          subtitle="按「我的排班」的开始日期自动定时提醒（App 关掉也会响）"
+          right={
+            <Switch
+              value={s.shiftReminderEnabled}
+              onValueChange={(v) => { void updateSettings({ shiftReminderEnabled: v }); }}
+              trackColor={{ true: colors.primary, false: colors.track }}
+            />
+          }
+        />
+        <Divider inset={64} />
+        <Row
+          icon="calendar-outline"
+          title="提前多久提醒"
+          subtitle={s.shiftReminderDaysAhead > 0
+            ? `服务前 ${s.shiftReminderDaysAhead} 天的晚上 20:00`
+            : '当天提醒'}
+          right={
+            <View style={styles.opts}>
+              {[0, 1, 2, 3].map((d) => (
+                <Tap key={d} onPress={() => { void updateSettings({ shiftReminderDaysAhead: d }); }}>
+                  <View style={[styles.opt, s.shiftReminderDaysAhead === d && styles.optOn]}>
+                    <Text style={[styles.optText, s.shiftReminderDaysAhead === d && styles.optTextOn]}>
+                      {d === 0 ? '当天' : `${d} 天`}
+                    </Text>
+                  </View>
+                </Tap>
+              ))}
+            </View>
+          }
+        />
+        {s.shiftReminderDaysAhead === 0 ? (
+          <>
+            <Divider inset={64} />
+            <Row
+              icon="time-outline"
+              title="当天几点提醒"
+              subtitle={`当天 ${s.shiftReminderHour}:00 提醒（排班带具体时间时改为开始前 1 小时）`}
+              right={
+                <View style={styles.opts}>
+                  {[6, 7, 8, 9].map((h) => (
+                    <Tap key={h} onPress={() => { void updateSettings({ shiftReminderHour: h }); }}>
+                      <View style={[styles.opt, s.shiftReminderHour === h && styles.optOn]}>
+                        <Text style={[styles.optText, s.shiftReminderHour === h && styles.optTextOn]}>
+                          {h}点
+                        </Text>
+                      </View>
+                    </Tap>
+                  ))}
+                </View>
+              }
+            />
+          </>
+        ) : null}
+        <Divider inset={64} />
+        <Row
+          icon="notifications-circle-outline"
+          title="已排的提醒"
+          subtitle="点这里按当前排班重新排一遍"
+          onPress={() => { void onReschedule(); }}
+          right={<Badge text={reminderCount === null ? '…' : `${reminderCount} 条`} tone="neutral" />}
+        />
+      </Glass>
+
+      {/* ------------------------------------------------ iOS 实时活动 */}
+      {Platform.OS === 'ios' ? (
+        <>
+          <GroupTitle>iOS 实时活动</GroupTitle>
+          <Glass corner={R.lg} padded={false}>
+            <Row
+              icon="phone-portrait-outline"
+              title="上岛（灵动岛 / 锁屏倒计时）"
+              subtitle="服务进行时在锁屏和灵动岛显示剩余时间。需要原生扩展，Expo Go 里不生效"
+              right={
+                <Switch
+                  value={s.liveActivityEnabled}
+                  onValueChange={(v) => { void updateSettings({ liveActivityEnabled: v }); }}
+                  trackColor={{ true: colors.primary, false: colors.track }}
+                />
+              }
+            />
+            <Divider inset={64} />
+            <Text style={styles.hint}>
+              实测说明：实时活动由原生 Widget 扩展提供，Expo Go 无法运行。
+              关掉这个开关时，服务提醒仍会通过普通通知送达，不受影响。
+            </Text>
+          </Glass>
+        </>
+      ) : null}
 
       {/* ------------------------------------------------ 自动检查 */}
       <GroupTitle>自动检查</GroupTitle>
@@ -565,5 +701,22 @@ const styles = themedStyles(() => StyleSheet.create({
   footer: {
     fontSize: 11, color: colors.textFaint, lineHeight: 18,
     marginTop: spacing.lg, paddingHorizontal: spacing.xs,
+  },
+
+  /* 排班提醒的“提前几天 / 几点”选择器 */
+  opts: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  opt: {
+    paddingHorizontal: spacing.md, paddingVertical: 5,
+    borderRadius: R.pill, backgroundColor: colors.field,
+    borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.glassBorder,
+  },
+  optOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  optText: { fontSize: 11.5, fontWeight: '700', color: colors.textDim },
+  optTextOn: { color: colors.textOnAccent },
+
+  /* 分组内的说明文字 */
+  hint: {
+    fontSize: 11.5, color: colors.textFaint, lineHeight: 18,
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
   },
 }));
