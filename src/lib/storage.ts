@@ -3,7 +3,7 @@
  * 所有写入都经过这里，避免多处直接读写存储造成状态不一致。
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { EMPTY_STATE, DEFAULT_SETTINGS, } from './types';
+import { EMPTY_STATE, DEFAULT_SETTINGS, makeWatchKey } from './types';
 import type { AppState, WatchItem, StoredNotification } from './types';
 import type { OppItem, CountTable } from '../core/parser.mjs';
 
@@ -58,26 +58,27 @@ export async function clearState(): Promise<void> {
 
 /** 添加一个监控目标，返回新状态 */
 export function addWatch(state: AppState, watch: WatchItem): AppState {
-  if (state.watches.some((w) => w.id === watch.id)) {
-    throw new Error('这个团体已经在监控列表里了');
+  // 按 key（域名+id）判重，而不是只按 id —— 同 id 不同站点是两个团体
+  if (state.watches.some((w) => w.key === watch.key)) {
+    throw new Error(`这个团体已经在监控列表里了（${watch.host}）`);
   }
   return { ...state, watches: [...state.watches, watch] };
 }
 
 /** 删除监控目标 */
-export function removeWatch(state: AppState, id: string): AppState {
-  return { ...state, watches: state.watches.filter((w) => w.id !== id) };
+export function removeWatch(state: AppState, key: string): AppState {
+  return { ...state, watches: state.watches.filter((w) => w.key !== key) };
 }
 
 /** 修改监控目标 */
 export function updateWatch(
   state: AppState,
-  id: string,
+  key: string,
   patch: Partial<WatchItem>
 ): AppState {
   return {
     ...state,
-    watches: state.watches.map((w) => (w.id === id ? { ...w, ...patch } : w)),
+    watches: state.watches.map((w) => (w.key === key ? { ...w, ...patch } : w)),
   };
 }
 
@@ -121,6 +122,7 @@ export function makeWatch(params: {
   name?: string;
 }): WatchItem {
   return {
+    key: makeWatchKey(params.host, params.id),
     id: params.id,
     host: params.host,
     url: params.url,
@@ -153,14 +155,19 @@ export function applySnapshotToWatch(
 
 /**
  * 兼容旧版本数据结构。
- * 早期版本用 knownIds（项目 id 数组）去重，但实测发现 id 每次请求都变，
- * 该方案不可用。这里把旧字段安全转换成新的指纹计数表：
- * 无法还原指纹时给空表，下次检查会重新建立基线（不会误报）。
+ *
+ * 修过两处历史问题：
+ *   1. 早期用 knownIds（项目 id 数组）去重，但实测发现项目 id 每次请求都变，
+ *      该方案不可用 → 改成指纹计数表；无法还原时给空表，下次检查重建基线（不会误报）。
+ *   2. 早期把团体 id 当主键，忽略了所在站点。志愿云各省分站是独立站点，
+ *      同 id 不同域名是两个不同团体 → 补上 key = host~id。
  */
 function migrateWatch(raw: unknown): WatchItem | null {
   if (!raw || typeof raw !== 'object') return null;
   const w = raw as Record<string, unknown>;
   if (typeof w.id !== 'string' || !w.id) return null;
+
+  const host = typeof w.host === 'string' && w.host ? w.host : 'gz.zhiyuanyun.com';
 
   const knownCounts =
     w.knownCounts && typeof w.knownCounts === 'object'
@@ -168,8 +175,10 @@ function migrateWatch(raw: unknown): WatchItem | null {
       : {};
 
   return {
+    // 旧数据没有 key，按 host+id 补出来
+    key: typeof w.key === 'string' && w.key ? w.key : makeWatchKey(host, w.id),
     id: w.id,
-    host: typeof w.host === 'string' ? w.host : 'gz.zhiyuanyun.com',
+    host,
     url: typeof w.url === 'string' ? w.url : '',
     name: typeof w.name === 'string' ? w.name : w.id,
     alias: typeof w.alias === 'string' ? w.alias : undefined,

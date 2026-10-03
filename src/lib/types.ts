@@ -6,7 +6,16 @@ export type { OppItem };
 
 /** 被监控的团体 */
 export interface WatchItem {
-  /** 团体 id（如 Vl6t7DSgAHI3O），同时作为主键 */
+  /**
+   * 主键 = `${host}~${id}`。
+   *
+   * ⚠️ 为什么不能只用 id：志愿云各省分站是独立站点，
+   * 同一个 id 在不同域名下是不同的团体（甚至可能不存在）。
+   * 早期版本只按 id 去重，导致「同 id 不同域名」被误判为重复，
+   * 删除时也会把另一个站点的一起删掉。
+   */
+  key: string;
+  /** 团体 id（如 Vl6t7DSgAHI3O） */
   id: string;
   /** 站点域名，如 gz.zhiyuanyun.com */
   host: string;
@@ -45,6 +54,11 @@ export interface StoredNotification {
   oppIds: string[];
   createdAt: string;
   read: boolean;
+}
+
+/** 把域名和团体 id 合成主键。用 ~ 分隔，避免 # / 等 URL 保留字符 */
+export function makeWatchKey(host: string, id: string): string {
+  return `${host}~${id}`;
 }
 
 /** 邮件发送通道 */

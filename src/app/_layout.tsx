@@ -12,7 +12,7 @@ import { Platform, View } from 'react-native';
 
 import { StoreProvider } from '../lib/store';
 import { Backdrop } from '../components/ui';
-import { colors } from '../lib/theme';
+import { applyScheme, colors, useScheme } from '../lib/theme';
 
 /**
  * 点击通知时跳转到通知页。
@@ -49,19 +49,29 @@ function useNotificationObserver() {
 export default function RootLayout() {
   useNotificationObserver();
 
+  const scheme = useScheme();
+  // 把当前色板同步给 theme.ts（组件代码里直接读 colors 的地方都靠它）。
+  // 这是幂等的模块级赋值，放在渲染里是为了让子树同一轮就拿到新色板。
+  applyScheme(scheme);
+
   return (
     <SafeAreaProvider>
       <StoreProvider>
-        <StatusBar style="dark" />
-        {/* 全局渐变背景：所有页面都是透明的，玻璃面板靠它出效果 */}
-        <View style={{ flex: 1 }}>
+        <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+        {/*
+          key={scheme}：切换深浅色时整棵 UI 重新挂载。
+          样式对象是通过 getter 惰性重建的，必须让组件重新渲染才能生效。
+          StoreProvider 在外层，所以监控数据不会丢。
+        */}
+        <View key={scheme} style={{ flex: 1 }}>
+          {/* 全局渐变背景：所有页面都是透明的，玻璃面板靠它出效果 */}
           <Backdrop />
           <Stack
             screenOptions={{
               headerShown: false,
               // 头部也是玻璃材质，压住内容时更好看
               headerTransparent: true,
-              headerBlurEffect: 'systemUltraThinMaterialLight',
+              headerBlurEffect: colors.blurTint,
               headerTintColor: colors.primary,
               headerTitleStyle: { fontSize: 16, fontWeight: '700', color: colors.text },
               headerBackTitle: '返回',

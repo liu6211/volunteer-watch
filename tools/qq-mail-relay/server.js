@@ -22,7 +22,7 @@ const nodemailer = require('nodemailer');
 
 const PORT = Number(process.env.PORT || 3000);
 
-/** 发信用的 QQ 邮箱，例如 180957824@qq.com */
+/** 发信用的 QQ 邮箱，例如 yourname@qq.com */
 const QQ_USER = process.env.QQ_USER || '';
 
 /** QQ 邮箱的 16 位授权码（不是登录密码！） */

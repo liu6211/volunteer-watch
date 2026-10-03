@@ -34,7 +34,7 @@ npm install
 ### Windows PowerShell
 
 ```powershell
-$env:QQ_USER      = "180957824@qq.com"
+$env:QQ_USER      = "yourname@qq.com"
 $env:QQ_AUTH_CODE = "你复制到的16位授权码"
 node server.js
 ```
@@ -42,7 +42,7 @@ node server.js
 ### macOS / Linux
 
 ```bash
-QQ_USER="180957824@qq.com" \
+QQ_USER="yourname@qq.com" \
 QQ_AUTH_CODE="你复制到的16位授权码" \
 node server.js
 ```
@@ -56,7 +56,7 @@ node server.js
   QQ 邮箱中转服务已启动
 ========================================
   监听端口 : 3000
-  发件邮箱 : 180957824@qq.com
+  发件邮箱 : yourname@qq.com
   鉴权     : 未开启（可选）
 
   App 里要填的地址（按你用哪台机器访问选一个）：

@@ -18,7 +18,7 @@ import {
   updateSettings as updateSettingsOp, pushNotifications, markAllRead, clearNotifications,
 } from './storage';
 import type { AppState, WatchItem, StoredNotification } from './types';
-import { EMPTY_STATE, DEFAULT_SETTINGS } from './types';
+import { EMPTY_STATE, DEFAULT_SETTINGS, makeWatchKey } from './types';
 import { runCheck } from './checker';
 import {
   configureNotificationHandler, requestNotificationPermission, presentLocalNotification,
@@ -40,12 +40,15 @@ export interface StoreValue {
   /** 上次检查的汇总提示 */
   lastRunMessage: string;
 
-  addWatchFromUrl: (input: string, alias?: string) => Promise<{ id: string; name: string }>;
-  removeWatch: (id: string) => Promise<void>;
-  setWatchEnabled: (id: string, enabled: boolean) => Promise<void>;
-  renameWatch: (id: string, alias: string) => Promise<void>;
+  addWatchFromUrl: (
+    input: string,
+    alias?: string
+  ) => Promise<{ key: string; name: string; firstResult?: string }>;
+  removeWatch: (key: string) => Promise<void>;
+  setWatchEnabled: (key: string, enabled: boolean) => Promise<void>;
+  renameWatch: (key: string, alias: string) => Promise<void>;
   checkAll: () => Promise<void>;
-  checkOneWatch: (id: string) => Promise<void>;
+  checkOneWatch: (key: string) => Promise<void>;
   updateSettings: (patch: Partial<AppState['settings']>) => Promise<void>;
   markAllNotificationsRead: () => Promise<void>;
   clearAllNotifications: () => Promise<void>;
@@ -146,10 +149,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const addWatchFromUrl = useCallback(
     async (input: string, alias?: string) => {
       const target = normalizeOrgInput(input); // 非法输入会在这里抛错，交给 UI 显示
+      const key = makeWatchKey(target.host, target.id);
       return enqueue(async () => {
         const current = stateRef.current;
-        if (current.watches.some((w) => w.id === target.id)) {
-          throw new Error('这个团体已经在监控列表里了');
+        // 按 key 判重：同 id 不同站点是两个不同团体
+        if (current.watches.some((w) => w.key === key)) {
+          throw new Error(`这个团体已经在监控列表里了（${target.host}）`);
         }
         const watch = makeWatch({ id: target.id, host: target.host, url: target.url });
         if (alias) watch.alias = alias;
@@ -161,13 +166,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         try {
           const result = await runCheck([watch], false);
           const updated = result.watches[0];
-          await persist((s) => updateWatchOp(s, watch.id, updated));
+          await persist((s) => updateWatchOp(s, watch.key, updated));
           await registerBackgroundTask(stateRef.current.settings.intervalMinutes);
           void refreshBgStatus();
-          return { id: watch.id, name: updated.name };
-        } catch {
-          // 抓取失败不影响添加成功
-          return { id: watch.id, name: watch.name };
+          return { key: watch.key, name: updated.name, firstResult: updated.lastResult };
+        } catch (e) {
+          // 抓取失败不影响添加成功，但要把原因带回去让 UI 提示用户
+          const reason = (e as Error).message;
+          await persist((s) => updateWatchOp(s, watch.key, { lastResult: `检查失败：${reason}` }));
+          return { key: watch.key, name: watch.name, firstResult: `检查失败：${reason}` };
         }
       });
     },
@@ -175,9 +182,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   );
 
   const removeWatch = useCallback(
-    async (id: string) => {
+    async (key: string) => {
       await enqueue(async () => {
-        await persist((s) => removeWatchOp(s, id));
+        await persist((s) => removeWatchOp(s, key));
         const rest = stateRef.current.watches.filter((w) => w.enabled);
         if (rest.length === 0) {
           await unregisterBackgroundTask().catch(() => undefined);
@@ -189,9 +196,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   );
 
   const setWatchEnabled = useCallback(
-    async (id: string, enabled: boolean) => {
+    async (key: string, enabled: boolean) => {
       await enqueue(async () => {
-        await persist((s) => updateWatchOp(s, id, { enabled }));
+        await persist((s) => updateWatchOp(s, key, { enabled }));
         const active = stateRef.current.watches.filter((w) => w.enabled);
         if (active.length > 0 && stateRef.current.settings.backgroundCheckEnabled) {
           await registerBackgroundTask(stateRef.current.settings.intervalMinutes).catch(() => undefined);
@@ -205,9 +212,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   );
 
   const renameWatch = useCallback(
-    async (id: string, alias: string) => {
+    async (key: string, alias: string) => {
       await enqueue(async () => {
-        await persist((s) => updateWatchOp(s, id, { alias }));
+        await persist((s) => updateWatchOp(s, key, { alias }));
       });
     },
     [enqueue, persist]
@@ -287,8 +294,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, [checking, enqueue, applyCheckResult]);
 
   const checkOneWatch = useCallback(
-    async (id: string) => {
-      const watch = stateRef.current.watches.find((w) => w.id === id);
+    async (key: string) => {
+      const watch = stateRef.current.watches.find((w) => w.key === key);
       if (!watch) return;
       setChecking(true);
       try {

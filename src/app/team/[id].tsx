@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useStore, displayName } from '../../lib/store';
 import { colors, radius as R, spacing, timeAgo, statusColor } from '../../lib/theme';
+import { themedStyles } from '../../lib/theme';
 import type { OppItem } from '../../lib/types';
 import { Badge, Divider, Glass, GlassButton, Icon, Tap } from '../../components/ui';
 
@@ -22,7 +23,8 @@ export default function TeamDetailScreen() {
   const { state, checking, checkOneWatch, removeWatch, renameWatch } = useStore();
   const insets = useSafeAreaInsets();
 
-  const watch = useMemo(() => state.watches.find((w) => w.id === id), [state.watches, id]);
+  // 路由参数就是监控项的主键（host~id）
+  const watch = useMemo(() => state.watches.find((w) => w.key === id), [state.watches, id]);
 
   const [editing, setEditing] = useState(false);
   const [alias, setAlias] = useState('');
@@ -54,7 +56,7 @@ export default function TeamDetailScreen() {
   };
 
   const commitRename = async () => {
-    await renameWatch(watch.id, alias.trim());
+    await renameWatch(watch.key, alias.trim());
     setEditing(false);
   };
 
@@ -65,7 +67,7 @@ export default function TeamDetailScreen() {
         text: '删除',
         style: 'destructive',
         onPress: async () => {
-          await removeWatch(watch.id);
+          await removeWatch(watch.key);
           if (router.canGoBack()) router.back();
           else router.replace('/(tabs)');
         },
@@ -202,7 +204,7 @@ export default function TeamDetailScreen() {
                 icon={checking ? undefined : 'refresh'}
                 loading={checking}
                 variant="primary"
-                onPress={() => { void checkOneWatch(watch.id); }}
+                onPress={() => { void checkOneWatch(watch.key); }}
                 style={{ flex: 1 }}
               />
               <GlassButton
@@ -233,7 +235,7 @@ export default function TeamDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: 'transparent' },
   center: { flex: 1, backgroundColor: 'transparent', padding: spacing.lg },
   missingCard: { alignItems: 'center', paddingVertical: spacing.xl },
@@ -319,4 +321,4 @@ const styles = StyleSheet.create({
 
   emptyCard: { alignItems: 'center', paddingVertical: spacing.xl, gap: spacing.sm },
   emptyList: { fontSize: 12.5, color: colors.textDim },
-});
+}));

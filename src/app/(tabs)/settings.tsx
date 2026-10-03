@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useStore } from '../../lib/store';
 import { colors, radius as R, spacing } from '../../lib/theme';
+import { themedStyles } from '../../lib/theme';
 import {
   requestNotificationPermission, hasNotificationPermission, dismissAll,
   presentLocalNotification,
@@ -293,7 +294,7 @@ export default function SettingsScreen() {
             value={emailTo}
             onChangeText={setEmailTo}
             onBlur={() => { void updateSettings({ emailTo: emailTo.trim() }); }}
-            placeholder="180957824@qq.com"
+            placeholder="you@example.com"
             placeholderTextColor={colors.textFaint}
             autoCapitalize="none"
             keyboardType="email-address"
@@ -363,7 +364,7 @@ export default function SettingsScreen() {
               value={fromEmail}
               onChangeText={setFromEmail}
               onBlur={() => { void updateSettings({ emailFrom: fromEmail.trim() }); }}
-              placeholder="180957824@qq.com"
+              placeholder="you@example.com"
               placeholderTextColor={colors.textFaint}
               autoCapitalize="none"
               keyboardType="email-address"
@@ -417,7 +418,7 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: 'transparent' },
   content: { paddingHorizontal: spacing.lg },
   pageTitle: {
@@ -483,4 +484,4 @@ const styles = StyleSheet.create({
     fontSize: 11, color: colors.textFaint, lineHeight: 18,
     marginTop: spacing.lg, paddingHorizontal: spacing.xs,
   },
-});
+}));

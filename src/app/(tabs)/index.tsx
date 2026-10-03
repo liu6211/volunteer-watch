@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useStore, displayName, siteLabel } from '../../lib/store';
 import { colors, radius as R, spacing, timeAgo, glassShadow } from '../../lib/theme';
+import { themedStyles } from '../../lib/theme';
 import type { WatchItem } from '../../lib/types';
 import { Glass, GlassButton, Icon, Tap } from '../../components/ui';
 
@@ -61,7 +62,7 @@ export default function TeamsScreen() {
       `确定不再监控「${displayName(w)}」吗？已有的通知记录会保留。`,
       [
         { text: '取消', style: 'cancel' },
-        { text: '删除', style: 'destructive', onPress: () => { void removeWatch(w.id); } },
+        { text: '删除', style: 'destructive', onPress: () => { void removeWatch(w.key); } },
       ]
     );
   };
@@ -70,7 +71,7 @@ export default function TeamsScreen() {
     const latest = item.projects[0];
     return (
       <Tap
-        onPress={() => router.push(`/team/${item.id}`)}
+        onPress={() => router.push(`/team/${item.key}`)}
         onLongPress={() => onDelete(item)}
         style={styles.cardWrap}
       >
@@ -87,7 +88,7 @@ export default function TeamsScreen() {
             </View>
             <Switch
               value={item.enabled}
-              onValueChange={(v) => { void setWatchEnabled(item.id, v); }}
+              onValueChange={(v) => { void setWatchEnabled(item.key, v); }}
               trackColor={{ true: colors.primary, false: colors.track }}
             />
           </View>
@@ -140,11 +141,11 @@ export default function TeamsScreen() {
     <View style={styles.screen}>
       <FlatList
         data={watches}
-        keyExtractor={(w) => w.id}
+        keyExtractor={(w) => w.key}
         renderItem={renderItem}
         contentContainerStyle={[
           styles.list,
-          { paddingTop: insets.top + 56, paddingBottom: 170 },
+          { paddingTop: insets.top + 56, paddingBottom: spacing.xl },
         ]}
         ListHeaderComponent={
           <View style={styles.header}>
@@ -186,8 +187,9 @@ export default function TeamsScreen() {
         }
       />
 
-      {/* 底部悬浮操作条（避开自绘标签栏） */}
-      <View style={[styles.actions, { bottom: 96 + insets.bottom }]} pointerEvents="box-none">
+      {/* 底部操作条：走正常文档流，自动贴在标签栏正上方，
+          比绝对定位更稳（不会因为不同机型安全区算出奇怪的位置） */}
+      <View style={styles.actions}>
         <GlassButton
           label={checking ? '' : '立即检查'}
           icon={checking ? undefined : 'refresh'}
@@ -209,7 +211,7 @@ export default function TeamsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: 'transparent' },
 
   list: { paddingHorizontal: spacing.lg },
@@ -273,11 +275,11 @@ const styles = StyleSheet.create({
   },
 
   actions: {
-    position: 'absolute',
-    left: spacing.lg,
-    right: spacing.lg,
     flexDirection: 'row',
     gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
   },
-  actionBtn: { flex: 1, ...glassShadow },
-});
+  actionBtn: { flex: 1 },
+}));

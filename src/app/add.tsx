@@ -6,24 +6,21 @@
  */
 import React, { useMemo, useState } from 'react';
 import {
-  KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View,
+  Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useStore } from '../lib/store';
 import { colors, radius as R, spacing } from '../lib/theme';
+import { themedStyles } from '../lib/theme';
 import { Glass, GlassButton, Icon, Tap } from '../components/ui';
 
-/** 示例链接，方便直接抄 */
+/** 示例链接：只留实测可用的那个 */
 const EXAMPLES = [
   {
     label: '都匀三中青年志愿者服务队（贵州站）',
     url: 'https://gz.zhiyuanyun.com/app/org/view.php?id=Vl6t7DSgAHI3O',
-  },
-  {
-    label: '志愿中国（总站示例）',
-    url: 'https://www.zhiyuanyun.com/app/org/view.php?id=Vl6t7DSgAHI3O',
   },
 ];
 
@@ -69,7 +66,17 @@ export default function AddTeamScreen() {
       setAlias('');
       // replace：把「添加页」换成「详情页」，
       // 这样返回键会回到列表，而不会退回空的添加表单
-      router.replace(`/team/${res.id}`);
+      router.replace(`/team/${res.key}`);
+
+      // 首次抓取失败要明确提示，否则用户以为加成功了却什么都没监控到
+      if (res.firstResult?.startsWith('检查失败')) {
+        setTimeout(() => {
+          Alert.alert(
+            '抓取失败',
+            `${res.firstResult}\n\n团体已加入列表，但可能是链接不对或该站点上没有这个团体。\n可以稍后重试，或长按卡片删除。`
+          );
+        }, 350);
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -188,7 +195,7 @@ export default function AddTeamScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: 'transparent' },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl * 2 },
 
@@ -232,4 +239,4 @@ const styles = StyleSheet.create({
   note: { marginTop: spacing.xl },
   noteRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
   noteText: { flex: 1, fontSize: 12, color: colors.textDim, lineHeight: 19 },
-});
+}));

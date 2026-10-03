@@ -22,6 +22,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import {
   bgGradient, buttonShadow, colors, glassShadow, radius as R, spacing,
 } from '../lib/theme';
+import { themedStyles } from '../lib/theme';
 
 /* ------------------------------------------------------------------ 图标 */
 
@@ -39,7 +40,7 @@ export function Icon({
 export function Backdrop() {
   return (
     <LinearGradient
-      colors={bgGradient}
+      colors={bgGradient()}
       start={{ x: 0.1, y: 0 }}
       end={{ x: 0.9, y: 1 }}
       style={StyleSheet.absoluteFill}
@@ -61,10 +62,11 @@ export function Glass({
 }) {
   const android = Platform.OS === 'android';
   return (
-    <View style={[{ borderRadius: corner, overflow: 'hidden' }, glassShadow, style]}>
+    <View style={[{ borderRadius: corner, overflow: 'hidden' }, glassShadow(), style]}>
       <BlurView
         intensity={intensity}
-        tint={Platform.OS === 'ios' ? 'systemUltraThinMaterialLight' : 'light'}
+        // 深浅色各用一套系统材质
+        tint={Platform.OS === 'ios' ? colors.blurTint : 'light'}
         // 安卓 12 以下会自动退化成半透明，所以下面垫了底色
         blurMethod={android ? 'dimezisBlurViewSdk31Plus' : undefined}
         style={[
@@ -146,7 +148,7 @@ export function GlassButton({
         style={[
           styles.button,
           { backgroundColor: bg },
-          isPrimary ? buttonShadow : glassShadow,
+          isPrimary ? buttonShadow() : glassShadow(),
           !isPrimary && !isDanger ? { borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.glassBorder } : null,
           disabled ? { opacity: 0.5 } : null,
         ]}
@@ -190,7 +192,7 @@ export function GroupTitle({ children }: { children: React.ReactNode }) {
   return <Text style={styles.groupTitle}>{children}</Text>;
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   divider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: colors.glassDivider,
@@ -222,4 +224,4 @@ const styles = StyleSheet.create({
     marginLeft: spacing.xs,
     letterSpacing: 0.4,
   },
-});
+}));

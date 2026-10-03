@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useStore } from '../../lib/store';
 import { colors, radius as R, spacing, formatTime } from '../../lib/theme';
+import { themedStyles } from '../../lib/theme';
 import type { StoredNotification } from '../../lib/types';
 import { Glass, Icon, Tap } from '../../components/ui';
 
@@ -99,7 +100,7 @@ export default function NotificationsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: 'transparent' },
   list: { paddingHorizontal: spacing.lg },
 
@@ -142,4 +143,4 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontSize: 16, fontWeight: '800', color: colors.text, marginBottom: spacing.sm },
   emptyText: { fontSize: 13, color: colors.textDim, textAlign: 'center', lineHeight: 20 },
-});
+}));

@@ -12,6 +12,7 @@ import { Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, radius, spacing } from '../lib/theme';
+import { themedStyles } from '../lib/theme';
 import { Glass, GroupTitle, Icon } from '../components/ui';
 
 /* ------------------------------------------------------------------ 小组件 */
@@ -252,7 +253,7 @@ export default function EmailHelpScreen() {
 
 /* ------------------------------------------------------------------ 样式 */
 
-const styles = StyleSheet.create({
+const styles = themedStyles(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: 'transparent' },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl * 2 },
 
@@ -317,4 +318,4 @@ const styles = StyleSheet.create({
   },
   errTitle: { fontSize: 13, fontWeight: '700', color: colors.text, marginBottom: 2 },
   errBody: { fontSize: 12, lineHeight: 19, color: colors.textDim },
-});
+}));
