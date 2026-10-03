@@ -18,6 +18,7 @@ import { fetchProject, joinProject } from '../../core/project.mjs';
 import type { OppDetail } from '../../core/project.mjs';
 import { fetchOppTab, OPP_TABS, postComment } from '../../core/account.mjs';
 import { useStore } from '../../lib/store';
+import { useRefreshOnReturn } from '../../lib/useRefreshOnReturn';
 import { colors, radius as R, spacing, themedStyles } from '../../lib/theme';
 import { Backdrop, Glass, GlassButton, Icon, Tap } from '../../components/ui';
 import { alertSiteFallback, openSite, SITE_PATHS } from '../../lib/siteFallback';
@@ -46,6 +47,9 @@ export default function ProjectDetailScreen() {
    * 站点拦掉 App 的 POST，写接口又不读 GET 参数，App 内提交必然失败，
    * 所以这里不再需要输入状态和提交函数。
    */
+
+  /* 从浏览器（报名/发评论）切回来时自动刷新一次 */
+  useRefreshOnReturn(() => { void load(); });
 
   const openExtra = async (tab: 'comment' | 'track' | 'hour') => {
     if (extraTab === tab) { setExtraTab(''); return; }
@@ -370,9 +374,20 @@ export default function ProjectDetailScreen() {
               </Glass>
             ) : extraItems.length === 0 ? (
               <Glass corner={R.lg} style={styles.card}>
-                <Text style={styles.extraEmpty}>
-                  {extraTab === 'track' ? '这个项目还没有发布动态' : '暂时没有内容'}
-                </Text>
+                {/*
+                 * 解析不出条目时不要直接说「没内容」——
+                 * 万一解析器跟不上站点结构变化，至少把原始文字显示出来，
+                 * 而不是让用户以为项目真的没数据。
+                 */}
+                {extraLines.length > 0 ? (
+                  extraLines.map((l, i) => (
+                    <Text key={i} style={styles.extraLine}>{l}</Text>
+                  ))
+                ) : (
+                  <Text style={styles.extraEmpty}>
+                    {extraTab === 'track' ? '这个项目还没有发布动态' : '暂时没有内容'}
+                  </Text>
+                )}
               </Glass>
             ) : (
               /* 每条一张卡片：谁 / 什么时候 / 说了什么，不再糊成一段 */

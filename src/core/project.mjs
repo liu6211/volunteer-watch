@@ -203,7 +203,7 @@ export function parseProject(html, host = 'gz.zhiyuanyun.com') {
   return {
     title,
     oppId,
-    info: { ...info, recruitStart: range[0] || info.recruitStart, recruitEnd: range[1] || '' },
+    info: { ...info, recruitStart: range[0] || info.recruitStart, recruitEnd: range[1] || info.recruitEnd },
     posts,
     canJoin,
     joinedAlready,

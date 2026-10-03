@@ -16,6 +16,7 @@ import {
 } from '../core/account.mjs';
 import { SEARCH_HOST } from '../core/search.mjs';
 import { useStore } from '../lib/store';
+import { useRefreshOnReturn } from '../lib/useRefreshOnReturn';
 import { colors, radius as R, spacing, themedStyles } from '../lib/theme';
 import { Backdrop, Glass, GlassButton, Icon, Tap, type IconName } from '../components/ui';
 import { alertSiteFallback, openSite, SITE_PATHS } from '../lib/siteFallback';
@@ -59,6 +60,14 @@ export default function AccountScreen() {
   /** 更换岗位 / 申请时长 / 评价 的内联表单 */
   const [panel, setPanel] = useState<Panel>({ kind: '' });
   const [panelBusy, setPanelBusy] = useState(false);
+
+  /*
+   * 提交类操作都跳浏览器完成，用户切回来时数据已经变了，
+   * 这里自动刷新当前这一栏，省得手动下拉。
+   */
+  useRefreshOnReturn(() => {
+    if (state.account && !loading) void load(tab, true);
+  });
 
   const load = useCallback(
     async (which: Tab, isRefresh = false) => {
