@@ -3,6 +3,8 @@
 export interface AccountSessionState {
   cookie: string;
   seid: string;
+  /** 哪种 Cookie 模式生效：platform（交给运行环境） / manual（自己带 Cookie 头） */
+  cookieMode?: string;
 }
 
 export interface MyProjectAction {

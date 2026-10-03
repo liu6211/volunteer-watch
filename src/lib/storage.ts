@@ -45,6 +45,9 @@ export async function loadState(): Promise<AppState> {
               lastSyncAt: parsed.account.lastSyncAt
                 ? String(parsed.account.lastSyncAt)
                 : undefined,
+              cookieMode: parsed.account.cookieMode
+                ? String(parsed.account.cookieMode)
+                : undefined,
             }
           : null,
     };

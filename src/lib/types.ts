@@ -118,6 +118,12 @@ export interface AccountSession {
   loginAt: string;
   /** 上次成功拉取数据的时间 */
   lastSyncAt?: string;
+  /**
+   * 登录时哪种 Cookie 模式生效（platform / manual）。
+   * 后续所有请求必须沿用同一种，否则会变成
+   * 「Cookie 是旧的、seid 是新的」→ 服务器回「访问超时」。
+   */
+  cookieMode?: string;
 }
 
 /** 整个应用的持久化状态 */

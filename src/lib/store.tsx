@@ -87,7 +87,7 @@ export interface StoreValue {
   /** 退出登录 */
   logoutAccount: () => Promise<void>;
   /** 用当前会话构造请求用的 session（供账号页取数据） */
-  accountSession: () => { cookie: string; seid: string };
+  accountSession: () => { cookie: string; seid: string; cookieMode?: string };
   /** 检查会话是否还有效 */
   verifyAccount: () => Promise<boolean>;
   /** 记录一次成功同步 */
@@ -305,7 +305,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const accountSession = useCallback(() => {
     const a = stateRef.current.account;
-    return a ? { cookie: a.cookie, seid: a.seid } : { cookie: '', seid: '' };
+    return a ? { cookie: a.cookie, seid: a.seid, cookieMode: a.cookieMode } : { cookie: '', seid: '', cookieMode: 'manual' };
   }, []);
 
   const loginAccount = useCallback(
@@ -325,6 +325,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         cookie: session.cookie,
         seid: session.seid,
         loginAt: new Date().toISOString(),
+        cookieMode: session.cookieMode || 'manual',
       };
       await enqueue(async () => {
         await persist((s) => ({ ...s, account: next }));
