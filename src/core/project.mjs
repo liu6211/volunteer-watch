@@ -184,16 +184,32 @@ export function parseProject(html, host = 'gz.zhiyuanyun.com') {
     }
   }
 
+  /*
+   * 取【数字项目编号】。
+   *
+   * ⚠️ 不能只依赖页面里的 opp_join(数字, 岗位) 调用：
+   * 名额已满或不可报名的项目，页面上根本没有那个调用，
+   * 于是 oppId 为空 —— 后续「讨论区/项目动态/时长公示」就会退回到
+   * 加密链接 id，而服务器收到无效 id 时不报错、直接返回【全站最新评论】，
+   * 表现出来就是「讨论区永远是那几条外地评论」。
+   *
+   * 实测页面上一定有隐藏域 <input id="opp_id" value="9713283">，
+   * 从这里取最可靠。
+   */
+  const idFromHidden = (html.match(/id="opp_id"[^>]*value="(\d+)"/i) ||
+                        html.match(/value="(\d+)"[^>]*id="opp_id"/i) || [])[1] || '';
+  const oppId = idFromHidden || jobIds[0]?.oppId || '';
+
   return {
     title,
-    oppId: jobIds[0]?.oppId || '',
+    oppId,
     info: { ...info, recruitStart: range[0] || info.recruitStart, recruitEnd: range[1] || '' },
     posts,
     canJoin,
     joinedAlready,
     detail,
     joiners: names,
-    url: `https://${host}/app/opp/view.php?id=${jobIds[0]?.oppId || ''}`,
+    url: `https://${host}/app/opp/view.php?id=${oppId}`,
   };
 }
 

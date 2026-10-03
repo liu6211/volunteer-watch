@@ -41,42 +41,11 @@ export default function ProjectDetailScreen() {
   const [extraLines, setExtraLines] = useState<string[]>([]);
   const [extraItems, setExtraItems] = useState<{ author: string; time: string; content: string }[]>([]);
   const [extraLoading, setExtraLoading] = useState(false);
-  const [commentText, setCommentText] = useState('');
-  const [commentBusy, setCommentBusy] = useState(false);
-
-  /** 发布评论（讨论区） */
-  const onPostComment = async () => {
-    if (!state.account) {
-      Alert.alert('还没登录', '发布评论需要先登录志愿云账号。', [
-        { text: '取消', style: 'cancel' },
-        { text: '去登录', onPress: () => router.push('/login') },
-      ]);
-      return;
-    }
-    setCommentBusy(true);
-    try {
-      await autoLogin().catch(() => undefined);
-      const r = await postComment(accountSession(), site, {
-        commentType: '1',
-        sourceId: urlId,
-        content: commentText,
-      });
-      if (r.ok) {
-        Alert.alert('已发布', r.message);
-      } else {
-        alertSiteFallback('发布失败', r.message, SITE_PATHS.oppView(urlId));
-      }
-      if (r.ok) {
-        setCommentText('');
-        await openExtra('comment');
-        await openExtra('comment');   // 再点一次展开并刷新列表
-      }
-    } catch (e) {
-      Alert.alert('出错', (e as Error).message);
-    } finally {
-      setCommentBusy(false);
-    }
-  };
+  /*
+   * 发布评论已改为跳到浏览器（原因见 lib/siteFallback.ts）：
+   * 站点拦掉 App 的 POST，写接口又不读 GET 参数，App 内提交必然失败，
+   * 所以这里不再需要输入状态和提交函数。
+   */
 
   const openExtra = async (tab: 'comment' | 'track' | 'hour') => {
     if (extraTab === tab) { setExtraTab(''); return; }
@@ -384,26 +353,15 @@ export default function ProjectDetailScreen() {
 
         {extraTab ? (
           <>
-            {/* 讨论区可以发评论 */}
+            {/* 讨论区：发评论要在浏览器里做，所以这里只留按键 */}
             {extraTab === 'comment' ? (
-              <Glass corner={R.md} style={styles.card}>
-                <TextInput
-                  style={styles.cmtInput}
-                  value={commentText}
-                  onChangeText={setCommentText}
-                  placeholder="说点什么…（需要登录）"
-                  placeholderTextColor={colors.textFaint}
-                  multiline
-                />
-                <GlassButton
-                  label={commentBusy ? '发布中…' : '发布评论'}
-                  icon={commentBusy ? undefined : 'send-outline'}
-                  loading={commentBusy}
-                  variant="primary"
-                  onPress={() => openSite(SITE_PATHS.oppView(urlId))}
-                  style={{ marginTop: spacing.md }}
-                />
-              </Glass>
+              <GlassButton
+                label="去浏览器发布评论"
+                icon="send-outline"
+                variant="primary"
+                onPress={() => openSite(SITE_PATHS.oppView(data?.oppId || urlId))}
+                style={{ marginBottom: spacing.sm }}
+              />
             ) : null}
 
             {extraLoading ? (

@@ -214,3 +214,24 @@ test('fetchProject: 拼接正确的公开地址', async () => {
   assert.match(seen, /^https:\/\/gz\.zhiyuanyun\.com\/app\/opp\/view\.php\?id=9713283$/);
   assert.equal(p.posts[0].jobId, '11418895');
 });
+
+test('parseProject: 从隐藏域取数字项目编号（不依赖 opp_join 调用）', () => {
+  /*
+   * 名额已满/不可报名的项目页面上没有 opp_join(数字,岗位) 调用，
+   * 只靠它会取到空 —— 那样讨论区/时长公示就会退回加密 id，
+   * 服务器对无效 id 不报错、直接返回全站最新评论。
+   * 页面上一定有 <input id="opp_id" value="数字">，从这里取。
+   */
+  const html = `
+    <input type="hidden" id="opp_id" value="9713283">
+    <input type="hidden" id="source_id" value="9713283">
+    <div class="f14">20261006万达广场一号门宠物领养志愿服务</div>`;
+  const p = parseProject(html, 'gz.zhiyuanyun.com');
+  assert.equal(p.oppId, '9713283', '应从隐藏域取到数字编号');
+});
+
+test('parseProject: 没有隐藏域时退回 opp_join 的参数', () => {
+  const html = `<a href="javascript:void(0);" onclick="opp_join(9710047,11415116);">报名</a>`;
+  const p = parseProject(html, 'gz.zhiyuanyun.com');
+  assert.equal(p.oppId, '9710047');
+});
