@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import {
   parseMyProjects, parseMyOrgs, parseMyHours, login,
   parseGenericTable, parseCardImages, certUrl, featureByKey, ACCOUNT_FEATURES,
-  SITE_PUBKEY, ACCOUNT_PATHS, createSession, checkNeedCaptcha,
+  SITE_PUBKEY, ACCOUNT_PATHS, createSession, checkNeedCaptcha, fetchOppTab,
 } from '../src/core/account.mjs';
 
 /* ------------------------------------------------ 我的项目（真实结构） */
@@ -433,6 +433,63 @@ test('certUrl: 指向实测可用的 cert.php', () => {
 test('featureByKey: 能找到也能返回 null', () => {
   assert.equal(featureByKey('card')?.title, '志愿者证');
   assert.equal(featureByKey('不存在'), null);
+});
+
+/* ------------------------------------------------ 讨论区 / 动态 解析 */
+
+test('fetchOppTab: 讨论区按「作者+时间+内容」拆成条目', async () => {
+  // 照真实渲染出来的文字模式：作者 时间 回复 内容
+  const html = `<table><tr><td>
+    杜美仪 2020-08-04 21:00:31 回复 我是志愿者杜美仪，我参加了弯腰一秒拾文明活动。
+    张三 2020-06-28 22:49:25 回复 我也想参加
+  </td></tr></table>
+  <div id="creply"><p>在这里畅所欲言吧~~</p><textarea id="content"></textarea>发布评论</div>`;
+
+  const fake = async () => ({
+    ok: true, status: 200,
+    headers: { get: () => null, getSetCookie: () => [] },
+    text: async () => html,
+  });
+
+  const r = await fetchOppTab(null, 'gz.zhiyuanyun.com', 'comment', '9713283', 1, { fetchImpl: fake });
+  assert.equal(r.items.length, 2, '应拆出两条');
+  assert.equal(r.items[0].author, '杜美仪');
+  assert.match(r.items[0].time, /2020-08-04/);
+  assert.match(r.items[0].content, /弯腰一秒拾文明/);
+  assert.equal(r.items[1].author, '张三');
+  assert.match(r.items[1].content, /我也想参加/);
+});
+
+test('fetchOppTab: 评论输入表单不会被当成内容', async () => {
+  const html = `<table></table><div id="creply">
+    <p>在这里畅所欲言吧~~</p><textarea id="content"></textarea>发布评论</div>`;
+  const fake = async () => ({
+    ok: true, status: 200,
+    headers: { get: () => null, getSetCookie: () => [] },
+    text: async () => html,
+  });
+  const r = await fetchOppTab(null, 'gz.zhiyuanyun.com', 'comment', '1', 1, { fetchImpl: fake });
+  assert.equal(r.empty, true, '没有评论时应标记为空');
+  assert.ok(!JSON.stringify(r.items).includes('发布评论'), '不该把按钮文字当内容');
+});
+
+test('fetchOppTab: 拼接正确的接口地址', async () => {
+  let seen = '';
+  const fake = async (url) => {
+    seen = url;
+    return {
+      ok: true, status: 200,
+      headers: { get: () => null, getSetCookie: () => [] },
+      text: async () => '',
+    };
+  };
+  await fetchOppTab(null, 'gz.zhiyuanyun.com', 'track', '9713283', 2, { fetchImpl: fake });
+  assert.match(seen, /m=get_track/);
+  assert.match(seen, /id=9713283/);
+  assert.match(seen, /p=2/);
+
+  await fetchOppTab(null, 'gz.zhiyuanyun.com', 'hour', '9713283', 1, { fetchImpl: fake });
+  assert.match(seen, /m=get_hour_list/);
 });
 
 /* ------------------------------------------------ 常量与工具 */

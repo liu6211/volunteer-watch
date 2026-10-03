@@ -187,7 +187,16 @@ export function leaveOrg(
 /** 项目详情页的其它标签 */
 export const OPP_TABS: Record<string, { action: string; label: string }>;
 
-/** 项目的讨论区 / 项目动态 / 时长公示（接口返回 HTML 片段，这里转成文本行） */
+/** 项目的讨论区 / 项目动态 / 时长公示 */
+export interface OppTabItem {
+  /** 作者（讨论区/动态有） */
+  author: string;
+  /** 时间 */
+  time: string;
+  /** 正文 */
+  content: string;
+}
+
 export function fetchOppTab(
   session: AccountSessionState | null,
   host: string,
@@ -195,7 +204,7 @@ export function fetchOppTab(
   id: string,
   page?: number,
   opts?: { commentType?: string; fetchImpl?: typeof fetch; timeoutMs?: number }
-): Promise<{ lines: string[]; empty: boolean }>;
+): Promise<{ items: OppTabItem[]; lines: string[]; empty: boolean }>;
 export function parseMyHours(html: string): MyHoursResult;
 
 export function checkSession(

@@ -37,6 +37,7 @@ export default function ProjectDetailScreen() {
   /** 讨论区 / 项目动态 / 时长公示 */
   const [extraTab, setExtraTab] = useState<'' | 'comment' | 'track' | 'hour'>('');
   const [extraLines, setExtraLines] = useState<string[]>([]);
+  const [extraItems, setExtraItems] = useState<{ author: string; time: string; content: string }[]>([]);
   const [extraLoading, setExtraLoading] = useState(false);
 
   const openExtra = async (tab: 'comment' | 'track' | 'hour') => {
@@ -44,8 +45,10 @@ export default function ProjectDetailScreen() {
     setExtraTab(tab);
     setExtraLoading(true);
     setExtraLines([]);
+    setExtraItems([]);
     try {
       const r = await fetchOppTab(accountSession(), site, tab, urlId, 1);
+      setExtraItems(r.items);
       setExtraLines(r.lines);
     } catch (e) {
       setExtraLines([`读取失败：${(e as Error).message}`]);
@@ -332,19 +335,31 @@ export default function ProjectDetailScreen() {
         </View>
 
         {extraTab ? (
-          <Glass corner={R.lg} style={styles.card}>
-            {extraLoading ? (
+          extraLoading ? (
+            <Glass corner={R.lg} style={styles.card}>
               <ActivityIndicator color={colors.primary} />
-            ) : extraLines.length === 0 ? (
+            </Glass>
+          ) : extraItems.length === 0 || extraItems.every((i) => !i.author && !i.content) ? (
+            <Glass corner={R.lg} style={styles.card}>
               <Text style={styles.extraEmpty}>
                 {extraTab === 'track' ? '这个项目还没有发布动态' : '暂时没有内容'}
               </Text>
-            ) : (
-              extraLines.map((l, i) => (
-                <Text key={i} style={styles.extraLine}>{l}</Text>
-              ))
-            )}
-          </Glass>
+            </Glass>
+          ) : (
+            /* 每条一张卡片，显示「谁 / 什么时候 / 说了什么」，不再糊成一段 */
+            extraItems.map((item, i) => (
+              <Glass key={i} corner={R.md} style={styles.cmtCard}>
+                <View style={styles.cmtHead}>
+                  <View style={styles.cmtAvatar}>
+                    <Icon name="person" size={13} color={colors.primary} />
+                  </View>
+                  <Text style={styles.cmtAuthor}>{item.author || '匿名志愿者'}</Text>
+                  {item.time ? <Text style={styles.cmtTime}>{item.time}</Text> : null}
+                </View>
+                <Text style={styles.cmtBody}>{item.content}</Text>
+              </Glass>
+            ))
+          )
         ) : null}
       </ScrollView>
     </View>
@@ -419,4 +434,16 @@ const styles = themedStyles(() => StyleSheet.create({
     fontSize: 12.5, color: colors.textFaint,
     textAlign: 'center', paddingVertical: spacing.lg,
   },
+
+  /* 评论 / 动态条目 */
+  cmtCard: { marginBottom: spacing.sm },
+  cmtHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  cmtAvatar: {
+    width: 24, height: 24, borderRadius: 12,
+    backgroundColor: colors.primaryDim,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  cmtAuthor: { fontSize: 12.5, fontWeight: '700', color: colors.primary },
+  cmtTime: { flex: 1, fontSize: 10.5, color: colors.textFaint, textAlign: 'right' },
+  cmtBody: { fontSize: 12.5, color: colors.text, lineHeight: 20 },
 }));

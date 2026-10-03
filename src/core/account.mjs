@@ -841,18 +841,44 @@ export async function fetchOppTab(session, host, tab, id, page = 1, opts = {}) {
     });
     const html = await res.text();
 
-    // 把 HTML 片段转成按行文本；顺带抽出姓名/日期这类结构
-    const lines = textOf(html)
+    /*
+     * 站点返回的是一段 HTML 片段。
+     * 直接转成文本会糊成一大段（非常难看），所以这里按「时间戳」切分：
+     * 讨论区/动态的每一条都是「作者 + 时间 + 回复 + 内容」，
+     * 用 YYYY-MM-DD HH:MM:SS 作为分隔点最稳。
+     */
+    const clean = String(html)
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      // 去掉评论输入表单部分（那不是内容）
+      .replace(/<div[^>]*id="creply"[\s\S]*$/i, ' ')
+      .replace(/在这里畅所欲言吧[^<]*/g, ' ');
+
+    const text = textOf(clean).replace(/\s+/g, ' ').trim();
+    const items = [];
+    const re = /(\d{4}-\d{2}-\d{2}\s+\d{1,2}:\d{2}(?::\d{2})?)/g;
+    const parts = text.split(re);
+
+    for (let i = 1; i < parts.length; i += 2) {
+      const time = parts[i];
+      const seg = (parts[i + 1] || '').replace(/^\s*回复\s*/, '').trim();
+      // 作者名在上一段的末尾
+      const author = ((parts[i - 1] || '').match(/([^\s，,。]{2,12})\s*$/) || [, ''])[1];
+      if (!seg) continue;
+      items.push({ author, time, content: seg.slice(0, 400) });
+    }
+
+    const lines = text
       .split('\n')
       .map((s) => s.trim())
-      .filter((s) => s && s !== '&nbsp;')
-      .slice(0, 80);
+      .filter(Boolean)
+      .slice(0, 60);
 
-    return {
-      lines,
-      /** 原始是否为空（没内容） */
-      empty: lines.length === 0 || /暂无|还没有|没有相关/.test(lines.join(' ')),
-    };
+    // 没切出条目时把整段当作一条，至少不会丢内容
+    if (items.length === 0 && text) items.push({ author: '', time: '', content: text.slice(0, 400) });
+
+    const empty = items.length === 0 || /暂无|还没有|没有相关|畅所欲言吧/.test(text);
+
+    return { items, lines, empty };
   } finally {
     clearTimeout(timer);
   }
