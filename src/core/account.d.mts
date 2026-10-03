@@ -74,6 +74,36 @@ export function login(
 
 export function logout(session: AccountSessionState, host: string): Promise<void>;
 
+export interface AccountFeature {
+  key: string;
+  title: string;
+  path: string;
+  kind: 'card' | 'pdf' | 'table';
+  desc: string;
+  icon: string;
+}
+
+export const ACCOUNT_FEATURES: AccountFeature[];
+
+export function featureByKey(key: string): AccountFeature | null;
+
+export function parseGenericTable(html: string): { headers: string[]; rows: string[][] };
+
+export function fetchGenericPage(
+  session: AccountSessionState,
+  host: string,
+  path: string
+): Promise<{ headers: string[]; rows: string[][] }>;
+
+export function parseCardImages(html: string, host: string): string[];
+
+export function fetchCard(
+  session: AccountSessionState,
+  host: string
+): Promise<{ images: string[] }>;
+
+export function certUrl(host: string): string;
+
 export function parseMyProjects(html: string): { items: MyProject[] };
 export function parseMyOrgs(html: string): { items: MyOrg[] };
 export function parseMyHours(html: string): MyHoursResult;

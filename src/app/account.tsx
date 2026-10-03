@@ -10,18 +10,19 @@ import {
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { fetchMyProjects, fetchMyOrgs, fetchMyHours } from '../core/account.mjs';
+import { fetchMyProjects, fetchMyOrgs, fetchMyHours, ACCOUNT_FEATURES } from '../core/account.mjs';
 import { SEARCH_HOST } from '../core/search.mjs';
 import { useStore } from '../lib/store';
 import { colors, radius as R, spacing, themedStyles } from '../lib/theme';
-import { Backdrop, Glass, GlassButton, Icon, Tap } from '../components/ui';
+import { Backdrop, Glass, GlassButton, Icon, Tap, type IconName } from '../components/ui';
 
-type Tab = 'projects' | 'orgs' | 'hours';
+type Tab = 'projects' | 'orgs' | 'hours' | 'more';
 
-const TABS: { key: Tab; label: string; icon: 'albums-outline' | 'people-outline' | 'time-outline' }[] = [
+const TABS: { key: Tab; label: string; icon: IconName }[] = [
   { key: 'projects', label: '我的项目', icon: 'albums-outline' },
   { key: 'orgs', label: '我的团体', icon: 'people-outline' },
   { key: 'hours', label: '服务时长', icon: 'time-outline' },
+  { key: 'more', label: '更多', icon: 'grid-outline' },
 ];
 
 interface Data {
@@ -136,7 +137,10 @@ export default function AccountScreen() {
 
   /* ------------------------------------------------ 已登录 */
 
-  const current = tab === 'projects' ? data.projects : tab === 'orgs' ? data.orgs : data.hours;
+  const current = tab === 'projects' ? data.projects
+    : tab === 'orgs' ? data.orgs
+      : tab === 'hours' ? data.hours
+        : null;
   const items: any[] = current?.items ?? [];
 
   return (
@@ -212,19 +216,56 @@ export default function AccountScreen() {
           })}
         </View>
 
-        {/* 时长汇总 */}
+        {/* 时长汇总：横向三格，紧凑不空旷。
+            注意 Glass 内部有独立的 padding 容器，不会继承 flexDirection，
+            所以必须 padded={false} 再自己套一层 row。 */}
         {tab === 'hours' && data.hours ? (
-          <Glass corner={R.md} style={styles.sumCard}>
-            <View style={styles.sumItem}>
-              <Text style={styles.sumValue}>{data.hours.effective ?? 0}</Text>
-              <Text style={styles.sumLabel}>已生效时长</Text>
-            </View>
-            <View style={styles.sumDivider} />
-            <View style={styles.sumItem}>
-              <Text style={styles.sumValue}>{data.hours.total ?? 0}</Text>
-              <Text style={styles.sumLabel}>累计（含待生效）</Text>
+          <Glass corner={R.md} padded={false} style={styles.sumCard}>
+            <View style={styles.sumRow}>
+              <View style={styles.sumItem}>
+                <Text style={styles.sumValue}>{data.hours.effective ?? 0}</Text>
+                <Text style={styles.sumLabel}>已生效</Text>
+              </View>
+              <View style={styles.sumDivider} />
+              <View style={styles.sumItem}>
+                <Text style={styles.sumValue}>{data.hours.total ?? 0}</Text>
+                <Text style={styles.sumLabel}>累计</Text>
+              </View>
+              <View style={styles.sumDivider} />
+              <View style={styles.sumItem}>
+                <Text style={styles.sumValue}>{data.hours.items.length}</Text>
+                <Text style={styles.sumLabel}>条记录</Text>
+              </View>
             </View>
           </Glass>
+        ) : null}
+
+        {/* 更多：志愿者证 / 时间证明下载 / 排班 / 培训 / 表彰 / 求证 / 评论 */}
+        {tab === 'more' ? (
+          <>
+            {ACCOUNT_FEATURES.map((f) => (
+              <Tap
+                key={f.key}
+                onPress={() => router.push(`/account-page?key=${f.key}`)}
+              >
+                <Glass corner={R.md} style={styles.featureCard}>
+                  <View style={styles.featureRow}>
+                    <View style={styles.featureIcon}>
+                      <Icon name={f.icon as IconName} size={17} color={colors.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.featureTitle}>{f.title}</Text>
+                      <Text style={styles.featureDesc}>{f.desc}</Text>
+                    </View>
+                    <Icon name="chevron-forward" size={16} color={colors.textFaint} />
+                  </View>
+                </Glass>
+              </Tap>
+            ))}
+            <Text style={styles.moreHint}>
+              修改资料、修改密码等编辑功能没有做，需要的请到网站操作
+            </Text>
+          </>
         ) : null}
 
         {loading ? (
@@ -360,9 +401,12 @@ const styles = themedStyles(() => StyleSheet.create({
   segmentText: { fontSize: 12.5, fontWeight: '700', color: colors.textDim },
   segmentTextActive: { color: colors.textOnAccent },
 
-  sumCard: {
-    flexDirection: 'row', alignItems: 'center',
-    marginBottom: spacing.md, paddingVertical: spacing.sm,
+  sumCard: { marginBottom: spacing.md },
+  sumRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
   },
   sumItem: { flex: 1, alignItems: 'center' },
   sumValue: { fontSize: 24, fontWeight: '800', color: colors.primary },
@@ -373,6 +417,20 @@ const styles = themedStyles(() => StyleSheet.create({
   loadingText: { fontSize: 12, color: colors.textDim },
 
   itemCard: { marginBottom: spacing.sm },
+
+  featureCard: { marginBottom: spacing.sm },
+  featureRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  featureIcon: {
+    width: 34, height: 34, borderRadius: 17,
+    backgroundColor: colors.primaryDim,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  featureTitle: { fontSize: 14, fontWeight: '700', color: colors.text },
+  featureDesc: { fontSize: 11.5, color: colors.textDim, marginTop: 3 },
+  moreHint: {
+    fontSize: 10.5, color: colors.textFaint, textAlign: 'center',
+    marginTop: spacing.lg, lineHeight: 16,
+  },
   itemTitle: { fontSize: 14, fontWeight: '700', color: colors.text, lineHeight: 19 },
   badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: spacing.sm },
   itemMeta: { fontSize: 11.5, color: colors.textDim, marginTop: spacing.sm, lineHeight: 17 },

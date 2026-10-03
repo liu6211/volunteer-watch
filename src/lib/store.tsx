@@ -17,7 +17,6 @@ import {
   login as loginAccountApi, logout as logoutAccountApi,
   createSession, checkSession,
 } from '../core/account.mjs';
-import type { AccountSession } from './types';
 import {
   saveCredentials as saveCredentialsSecure,
   loadCredentials, clearCredentials, loadSavedUsername,
@@ -28,7 +27,7 @@ import {
   updateSettings as updateSettingsOp, pushNotifications, markAllRead, clearNotifications,
   pushSearchHistory, removeSearchHistory, clearSearchHistory,
 } from './storage';
-import type { AppState, WatchItem, StoredNotification } from './types';
+import type { AppState, WatchItem, StoredNotification, AccountSession } from './types';
 import { EMPTY_STATE, DEFAULT_SETTINGS, makeWatchKey } from './types';
 import { runCheck } from './checker';
 import {

@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 
 import {
   parseMyProjects, parseMyOrgs, parseMyHours, login,
+  parseGenericTable, parseCardImages, certUrl, featureByKey, ACCOUNT_FEATURES,
   SITE_PUBKEY, ACCOUNT_PATHS, createSession, checkNeedCaptcha,
 } from '../src/core/account.mjs';
 
@@ -361,6 +362,77 @@ test('login: 手动 Cookie 模式用 credentials=omit，避免新旧 Cookie 混�
     if (c.cookie) assert.equal(c.credentials, 'omit', '手动带 Cookie 时必须 omit');
     else assert.equal(c.credentials, 'include');
   }
+});
+
+/* ------------------------------------------------ 通用表格 / 志愿者证 */
+
+test('parseGenericTable: 表头和数据分开，表头行不混进数据', () => {
+  const html = `<table class="table1">
+    <tr><th>状态</th><th>开始日期</th><th>项目名称</th></tr>
+    <tr><td>已确认</td><td>2026-10-05</td><td>游园会志愿服务</td></tr>
+    <tr><td>待确认</td><td>2026-11-01</td><td>图书馆志愿服务</td></tr>
+  </table>`;
+  const r = parseGenericTable(html);
+  assert.deepEqual(r.headers, ['状态', '开始日期', '项目名称']);
+  assert.equal(r.rows.length, 2);
+  assert.deepEqual(r.rows[0], ['已确认', '2026-10-05', '游园会志愿服务']);
+});
+
+test('parseGenericTable: 注释掉的旧行不算', () => {
+  const html = `<table class="table1">
+    <tr><th>a</th><th>b</th></tr>
+    <!-- <tr><td>作废</td><td>旧数据</td></tr> -->
+    <tr><td>有效</td><td>新数据</td></tr>
+  </table>`;
+  const r = parseGenericTable(html);
+  assert.equal(r.rows.length, 1);
+  assert.equal(r.rows[0][0], '有效');
+});
+
+test('parseGenericTable: 没有表格时返回空', () => {
+  const r = parseGenericTable('<html><body>没有表格</body></html>');
+  assert.deepEqual(r.headers, []);
+  assert.deepEqual(r.rows, []);
+});
+
+test('parseCardImages: 只取本人卡片图片，过滤站点通用图', () => {
+  const html = `
+    <img id="avatar" src="https://css.zhiyuanyun.com/default/images/noimg_avatar_1.jpg">
+    <img src="/images/temp/card_new/23486/234861090.png">
+    <img src="/images/card/default-2.png">
+    <img src="/images/temp/qrcode_vol_big/23486/234861090_7.png">
+    <img class="wx_pic" src="https://css.zhiyuanyun.com/default/img/zyyzj_wx.gif">
+    <img class="xcx_pic" src="https://css.zhiyuanyun.com/default/img/zyy_xcx.png">`;
+  const imgs = parseCardImages(html, 'gz.zhiyuanyun.com');
+  assert.equal(imgs.length, 3, '卡片正面/反面/二维码共 3 张');
+  for (const u of imgs) {
+    assert.match(u, /^https:\/\/gz\.zhiyuanyun\.com\/images\//);
+  }
+  assert.ok(!imgs.some((u) => /wx_pic|xcx|noimg_avatar/.test(u)), '站点通用图必须被过滤');
+});
+
+test('parseCardImages: 相对地址会补成完整地址', () => {
+  const imgs = parseCardImages('<img src="/images/card/x.png">', 'gz.zhiyuanyun.com');
+  assert.deepEqual(imgs, ['https://gz.zhiyuanyun.com/images/card/x.png']);
+});
+
+test('ACCOUNT_FEATURES: 包含用户点名的志愿者证与时间证明，且不含修改类', () => {
+  const keys = ACCOUNT_FEATURES.map((f) => f.key);
+  assert.ok(keys.includes('card'), '要有志愿者证');
+  assert.ok(keys.includes('cert'), '要有时间证明下载');
+  // 编辑功能不做
+  for (const f of ACCOUNT_FEATURES) {
+    assert.ok(!/info|editpass|password/i.test(f.path), `不应包含编辑类页面：${f.path}`);
+  }
+});
+
+test('certUrl: 指向实测可用的 cert.php', () => {
+  assert.equal(certUrl('gz.zhiyuanyun.com'), 'https://gz.zhiyuanyun.com/app/user/cert.php');
+});
+
+test('featureByKey: 能找到也能返回 null', () => {
+  assert.equal(featureByKey('card')?.title, '志愿者证');
+  assert.equal(featureByKey('不存在'), null);
 });
 
 /* ------------------------------------------------ 常量与工具 */

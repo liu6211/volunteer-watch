@@ -39,6 +39,46 @@ export const ACCOUNT_PATHS = {
   hours: '/app/user/hour.php',
 };
 
+/**
+ * 账号下的其它功能页。
+ * 路径和页面结构都是实测出来的；「修改资料 / 修改密码」这类编辑功能不做。
+ */
+export const ACCOUNT_FEATURES = [
+  {
+    key: 'card', title: '志愿者证', path: '/app/user/card.php', kind: 'card',
+    desc: '电子志愿者证（可下载卡片图片）', icon: 'card-outline',
+  },
+  {
+    key: 'cert', title: '时间证明下载', path: '/app/user/cert.php', kind: 'pdf',
+    desc: '生成并下载志愿服务时间证明 PDF', icon: 'document-text-outline',
+  },
+  {
+    key: 'plan', title: '我的排班', path: '/app/user/plan.php', kind: 'table',
+    desc: '已安排的志愿服务岗位', icon: 'calendar-outline',
+  },
+  {
+    key: 'train', title: '我的培训', path: '/app/user/train.php?type=checko', kind: 'table',
+    desc: '参加过的培训与学时', icon: 'school-outline',
+  },
+  {
+    key: 'honour', title: '我的表彰', path: '/app/user/honour.php', kind: 'table',
+    desc: '获得的表彰与奖励', icon: 'ribbon-outline',
+  },
+  {
+    key: 'help', title: '我的求证', path: '/app/user/help.php', kind: 'table',
+    desc: '发起的求助与求证', icon: 'help-circle-outline',
+  },
+  {
+    key: 'comment', title: '我的评论', path: '/app/user/comment.php', kind: 'table',
+    desc: '发表过的评价与评论', icon: 'chatbubble-outline',
+  },
+];
+
+/** 按 key 取功能定义 */
+export function featureByKey(key) {
+  return ACCOUNT_FEATURES.find((f) => f.key === key) || null;
+}
+
 /* ------------------------------------------------------------ 会话 */
 
 /** @returns {{cookie: string, seid: string, cookieMode?: 'platform'|'manual'}} */
@@ -486,7 +526,71 @@ export function parseMyHours(html) {
   return { items, total, effective };
 }
 
-/* ------------------------------------------------------------ 抓取 */
+/* ------------------------------------------------------------ 通用表格 */
+
+/**
+ * 通用表格解析：把 <table class="table1"> 拆成「表头 + 每行单元格文本」。
+ * 排班 / 培训 / 表彰 / 求证 / 评论 这些页面结构一致，用一套解析就够。
+ */
+export function parseGenericTable(html) {
+  const clean = String(html ?? '').replace(/<!--[\s\S]*?-->/g, '');
+  const idx = clean.indexOf('class="table1');
+  if (idx < 0) return { headers: [], rows: [] };
+
+  const start = clean.lastIndexOf('<table', idx);
+  const end = clean.indexOf('</table>', start);
+  const table = clean.slice(start, end < 0 ? undefined : end);
+
+  let headers = [];
+  const rows = [];
+  for (const tr of table.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
+    const inner = tr[1];
+    if (/<th\b/i.test(inner)) {
+      headers = [...inner.matchAll(/<th\b[^>]*>([\s\S]*?)<\/th>/gi)].map((m) => textOf(m[1]));
+      continue;
+    }
+    const cells = [...inner.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map((m) => textOf(m[1]));
+    if (cells.length) rows.push(cells);
+  }
+  return { headers, rows };
+}
+
+/** 抓一个通用表格页 */
+export async function fetchGenericPage(session, host, path) {
+  const { html, needLogin } = await fetchPage(session, host, path);
+  if (needLogin) throw new Error('登录已过期，请重新登录');
+  return parseGenericTable(html);
+}
+
+/* ------------------------------------------------------------ 志愿者证 */
+
+/**
+ * 从志愿者证页面取出卡片图片地址。
+ * 只保留属于用户自己的图片（/images/temp/ 和 /images/card/），
+ * 过滤掉站点通用的客服二维码之类。
+ */
+export function parseCardImages(html, host) {
+  const out = [];
+  for (const m of String(html ?? '').matchAll(/<img\b[^>]*src\s*=\s*["']([^"']+)["'][^>]*>/gi)) {
+    const src = m[1];
+    if (/wx_pic|xcx_pic|noimg_avatar|zyyzj_wx|zyy_xcx/.test(src)) continue;
+    if (!/\/images\/(temp|card)\//i.test(src)) continue;
+    out.push(/^https?:/i.test(src) ? src : `https://${host}${src.startsWith('/') ? '' : '/'}${src}`);
+  }
+  return [...new Set(out)];
+}
+
+/** 抓志愿者证页，返回图片地址列表 */
+export async function fetchCard(session, host) {
+  const { html, needLogin } = await fetchPage(session, host, '/app/user/card.php');
+  if (needLogin) throw new Error('登录已过期，请重新登录');
+  return { images: parseCardImages(html, host) };
+}
+
+/** 时间证明 PDF 的地址（该接口直接返回 PDF 文件流） */
+export function certUrl(host) {
+  return `${origin(host)}/app/user/cert.php`;
+}
 
 async function fetchPage(session, host, path) {
   const res = await req(session, origin(host) + path);

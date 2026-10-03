@@ -107,6 +107,10 @@ function ThemedApp() {
             options={{ headerShown: true, title: '我的志愿云' }}
           />
           <Stack.Screen
+            name="account-page"
+            options={{ headerShown: true, title: '' }}
+          />
+          <Stack.Screen
             name="help-email"
             options={{ headerShown: true, title: '邮箱通知怎么配' }}
           />
