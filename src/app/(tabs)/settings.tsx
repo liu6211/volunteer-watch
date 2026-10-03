@@ -175,6 +175,40 @@ export default function SettingsScreen() {
     >
       <Text style={styles.pageTitle}>设置</Text>
 
+      {/* ------------------------------------------------ 外观 */}
+      <GroupTitle>外观</GroupTitle>
+      <Glass corner={R.lg} padded={false}>
+        <Row
+          icon="contrast-outline"
+          title="界面主题"
+          subtitle={
+            s.themeMode === 'system'
+              ? '跟随系统（系统切深色，这里也变）'
+              : s.themeMode === 'dark'
+                ? '始终深色'
+                : '始终浅色'
+          }
+          right={
+            <Icon
+              name={s.themeMode === 'dark' ? 'moon' : s.themeMode === 'light' ? 'sunny' : 'phone-portrait-outline'}
+              size={18}
+              color={colors.primary}
+            />
+          }
+        />
+        <View style={styles.chips}>
+          {(['system', 'light', 'dark'] as const).map((m) => (
+            <Tap key={m} onPress={() => { void updateSettings({ themeMode: m }); }}>
+              <View style={[styles.chip, s.themeMode === m && styles.chipActive]}>
+                <Text style={[styles.chipText, s.themeMode === m && styles.chipTextActive]}>
+                  {m === 'system' ? '跟随系统' : m === 'light' ? '浅色' : '深色'}
+                </Text>
+              </View>
+            </Tap>
+          ))}
+        </View>
+      </Glass>
+
       {/* ------------------------------------------------ 通知 */}
       <GroupTitle>通知</GroupTitle>
       <Glass corner={R.lg} padded={false}>

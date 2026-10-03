@@ -152,7 +152,15 @@ export default function TeamsScreen() {
         ]}
         ListHeaderComponent={
           <View style={styles.header}>
-            <Text style={styles.pageTitle}>监控的团体</Text>
+            <View style={styles.titleRow}>
+              <Text style={styles.pageTitle}>监控的团体</Text>
+              {/* 右上角放大镜：进搜索页 */}
+              <Tap onPress={() => router.push('/search')} accessibilityLabel="搜索团体">
+                <View style={styles.searchBtn}>
+                  <Icon name="search" size={19} color={colors.primary} />
+                </View>
+              </Tap>
+            </View>
             <Glass corner={R.md} style={styles.statusCard} intensity={40}>
               <View style={styles.statusRow}>
                 {checking ? (
@@ -220,11 +228,16 @@ const styles = themedStyles(() => StyleSheet.create({
   list: { paddingHorizontal: spacing.lg },
 
   header: { marginBottom: spacing.md },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  searchBtn: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: colors.primaryDim,
+    alignItems: 'center', justifyContent: 'center',
+  },
   pageTitle: {
     fontSize: 26,
     fontWeight: '800',
     color: colors.text,
-    marginBottom: spacing.md,
     letterSpacing: 0.2,
   },
   statusCard: { width: '100%' },

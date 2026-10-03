@@ -64,6 +64,9 @@ export function makeWatchKey(host: string, id: string): string {
 /** 邮件发送通道 */
 export type EmailProvider = 'none' | 'relay' | 'resend' | 'brevo';
 
+/** 界面主题：跟随系统 / 强制浅色 / 强制深色 */
+export type ThemeMode = 'system' | 'light' | 'dark';
+
 /** 应用设置 */
 export interface AppSettings {
   /** 是否开启通知 */
@@ -72,6 +75,8 @@ export interface AppSettings {
   intervalMinutes: number;
   /** 是否启用定时自动检查 */
   backgroundCheckEnabled: boolean;
+  /** 界面主题（可手动切换，不再只跟随系统） */
+  themeMode: ThemeMode;
 
   /* ---------------------------------------------------- 邮箱通知 */
   /** 邮箱通知开关 */
@@ -100,12 +105,18 @@ export interface AppState {
   watches: WatchItem[];
   notifications: StoredNotification[];
   settings: AppSettings;
+  /** 团体搜索历史（最近在前，最多 12 条） */
+  searchHistory: string[];
 }
+
+/** 搜索历史最多保留几条 */
+export const MAX_SEARCH_HISTORY = 12;
 
 export const DEFAULT_SETTINGS: AppSettings = {
   notificationsEnabled: true,
   intervalMinutes: 15,
   backgroundCheckEnabled: true,
+  themeMode: 'system',
 
   emailEnabled: false,
   emailTo: '',
@@ -121,4 +132,5 @@ export const EMPTY_STATE: AppState = {
   watches: [],
   notifications: [],
   settings: DEFAULT_SETTINGS,
+  searchHistory: [],
 };

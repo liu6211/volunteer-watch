@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>志愿团体-志愿贵州</title>
+<script src="https://code.bdstatic.com/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+<script src="https://cdn.staticfile.org/jquery-migrate/3.5.2/jquery-migrate.min.js"></script>
+<script type="text/javascript" src="https://css.zhiyuanyun.com/lib/common.js"></script>
+<script type="text/javascript" src="https://css.zhiyuanyun.com/lib/datepicker.js"></script>
+<script type="text/javascript" src="https://css.zhiyuanyun.com/common/login.js"></script>
+<!--[if lte IE 6]>
+<script language="javascript" type="text/javascript" src="https://css.zhiyuanyun.com/lib/png.js" ></script>
+<script type="text/javascript">
+    DD_belatedPNG.fix('div, ul, li, input , a, a:hover, h2, b');
+</script>
+<![endif]-->
+<script type="text/javascript" src="https://css.zhiyuanyun.com/common/front.js"></script>
+<link href="https://css.zhiyuanyun.com/default/style.css" rel="stylesheet" type="text/css">
+<link href="https://css.zhiyuanyun.com/default/style.css" rel="stylesheet" type="text/css">
+<meta name="renderer" content="webkit|ie-stand">
+</head>
+<body>
+<div class="header">
+    <div class="wrap clearfix topmenu">
+        <meta name="csrf-token" content="4197a3274ae069ee087b77fb855a58a07998fe12d504f7a0de06b69389e458f3">
+<script>
+    $(document).ready(function(){
+
+        $.ajaxSetup({
+            headers:
+            { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') }
+        });
+    });
+</script>
+<script type="text/javascript" src="/app/api/site.all.js"></script>
+<span class="l" style="width:600px;">
+            <a href="/app/user/login.php" style="color:red">亲，请登录</a>&nbsp;
+        <a href="/app/user/register.php">志愿者注册</a>&nbsp;/&nbsp;<a href="/app/user/register.php?type=org">志愿团体注册</a>&nbsp;&nbsp;
+    </span>
+
+<span class="r topmenu_r">
+        <div class="topmenu_txt">    
+        <a href="/app/opp/opp.edit.php">发起项目</a>
+    </div>
+        <div class="topmenu_txt">    
+        <a href="/app/user/home.php" class="arrow1">志愿中心</a>
+        <div class="topmenu_con">
+            <ul>
+                <li><a href="/app/opp/opp.my.php">我的项目</a></li>
+                                <li><a href="/app/user/hour.php">我的时长</a></li>
+                <li><a href="/app/org/org.my.php">我的团体</a></li>
+                                            </ul>
+        </div>
+    </div>
+                <script>
+    $(function(){
+   
+        
+    
+});
+</script>        </span>
+    </div>
+</div>
+
+<div class="header_logo">
+    <div class="wrap clearfix">
+        <a href="/" class="l logo"><span>贵州省</span></a>
+        <div class="r clearfix" style="width:550px;">
+            <div class="l tsearch clearfix" style="width:350px;">
+                <div class="l" style="width:76px;height:44px;line-height:44px;text-align:center;">
+                            <div id="tsearch_select">
+                                <div id="select">志愿团体</div><input type="hidden" id="stype" value="2">                                <div id="tsearch_select_div">
+                                    <a href="javascript:void(0);" onclick="$('#tsearch_select>#select').html($(this).html());$('#stype').val(1);chpos(this);">志愿项目</a>
+                                    <a href="javascript:void(0);" onclick="$('#tsearch_select>#select').html($(this).html());$('#stype').val(2);chpos(this);">志愿团体</a>
+                                    <a href="javascript:void(0);" onclick="$('#tsearch_select>#select').html($(this).html());$('#stype').val(3);chpos(this);">新闻文章</a>
+                                </div>
+                            </div>  
+                </div>
+                <div class="l">
+                    &nbsp;&nbsp;&nbsp;<input style="width:140px;" type="text" class="sq" id="sq" value="都匀三中">
+                </div>
+                <div class="r">
+                    <a href="javascript:void(0);" onclick="top_search();" class="rrsearch"></a>
+                </div>
+                
+            </div>
+
+            <div class="r rlogo">
+                <a href="https://www.zhiyuanyun.com" target="_blank" style="width:130px;height:110px;display:block;"></a>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="nav">
+    <div class="wrap">
+        <a href="/" style="width:71px;">首页</a><a href="/app/opp/list.php" >志愿项目</a><a href="/app/org/list.php" class="sel">志愿团体</a><a href="/app/help/list.php" >求助中心</a><a href="//www.zhiyuanyun.com/cate/zyzg_zyfc/" target="_blank">志愿风采</a><a href="//www.zhiyuanyun.com/cate/zyzg_xxdt/" target="_blank">信息动态</a><a href="//www.zhiyuanyun.com/cate/zyzg_mtbd/" target="_blank">媒体报道</a><a href="//www.zhiyuanyun.com/cate/zyzg_yjpx/" target="_blank">研究培训</a><a href="//www.zhiyuanyun.com/cate/zyzg_zcwj/" target="_blank">政策文件</a><a href="//www.zhiyuanyun.com/cate/zyzg_syzn/" target="_blank">使用指南</a>
+    </div>
+</div>
+<div class="main">
+        <div class="wrap clearfix m10">
+        <div class="conl">
+            <div id="search_div">
+<form name="search_form" id="sform" action="list.php" method="get">
+ <div class="m10 search_form vform" id="search_form">
+    
+    <input type="hidden" name="tag" value=""><input type="hidden" name="area" value="0"><input type="hidden" name="area2" value="0"><input type="hidden" name="org_type" value=""><input type="hidden" name="members" value=""><input type="hidden" name="mode" value="list"><input type="hidden" name="pos" value="">    <ul class="list_search">
+        <li>
+            <span class="pretit">团体属地</span>
+            <span>全部</span><a href="?tag=&area=8152&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">贵阳市</a><a href="?tag=&area=8275&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">遵义市</a><a href="?tag=&area=8163&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">六盘水市</a><a href="?tag=&area=8290&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">安顺市</a><a href="?tag=&area=8306&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">铜仁市</a><a href="?tag=&area=8297&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">毕节市</a><a href="?tag=&area=8326&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">黔东南苗族侗族自治州</a><a href="?tag=&area=8343&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">黔南布依族苗族自治州</a><a href="?tag=&area=8317&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">黔西南布依族苗族自治州</a>        </li>
+        <li>
+            <span class="pretit">服务类别</span>
+            <span>全部</span><a href="?tag=法律服务&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">法律服务</a><a href="?tag=节水护水&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">节水护水</a><a href="?tag=礼仪接待&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">礼仪接待</a><a href="?tag=摄影摄像&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">摄影摄像</a><a href="?tag=绿化环保&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">绿化环保</a><a href="?tag=心理咨询&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">心理咨询</a><a href="?tag=电器维修&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">电器维修</a><a href="?tag=禁毒防艾&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">禁毒防艾</a><a href="?tag=旅游服务&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">旅游服务</a><a href="?tag=语言翻译&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">语言翻译</a><a href="?tag=德师教育&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">德师教育</a><a href="?tag=消防宣传&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">消防宣传</a><a href="?tag=科技宣传&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">科技宣传</a><a href="?tag=邻里帮助&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">邻里帮助</a><a href="?tag=网络文明&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">网络文明</a><a href="?tag=抢险救灾&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">抢险救灾</a><a href="?tag=自护维权&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">自护维权</a><a href="?tag=节庆赛会&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">节庆赛会</a><a href="?tag=敬老爱老&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">敬老爱老</a><a href="?tag=家教助学&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">家教助学</a><a href="?tag=医疗卫生&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">医疗卫生</a><a href="?tag=文化建设&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">文化建设</a><a href="?tag=计生帮扶&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">计生帮扶</a><a href="?tag=文明交通&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">文明交通</a><a href="?tag=生态文明&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">生态文明</a><a href="?tag=政务服务&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">政务服务</a>        </li>
+                <li>
+            <span class="pretit">团体类型</span>
+            <span>全部</span><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=4870&members=&mode=list&pos=">党政机关</a><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=4873&members=&mode=list&pos=">教育事业单位</a><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=4871&members=&mode=list&pos=">卫生事业单位</a><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=1445&members=&mode=list&pos=">科技事业单位</a><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=1456&members=&mode=list&pos=">文化事业单位</a><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=1733&members=&mode=list&pos=">社会福利事业单位</a><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=4872&members=&mode=list&pos=">其他事业单位</a><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=1489&members=&mode=list&pos=">群团组织</a><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=2629&members=&mode=list&pos=">居委会或村委会</a><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=1628&members=&mode=list&pos=">国有企业</a><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=1631&members=&mode=list&pos=">非国有企业</a><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=4874&members=&mode=list&pos=">社会团体</a><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=1727&members=&mode=list&pos=">社会服务机构</a><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=1730&members=&mode=list&pos=">基金会</a>        </li>
+        <!--
+        <li>
+            <span class="pretit">团体级别</span>
+            <span>全部</span><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">一级</a><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">二级</a><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">三级</a><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">四级及以下</a>        </li>
+        <li>
+            <span class="pretit">服务岗站</span>
+            <span>全部</span><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">示范站</a><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">服务站</a><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">示范岗</a><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=&mode=list&pos=">服务岗</a>        </li>
+        -->
+        <li>
+            <span class="pretit">团体人数</span>
+            <span>全部</span><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=1&mode=list&pos=">0</a><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=2&mode=list&pos=">1-100</a><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=3&mode=list&pos=">101-200</a><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=4&mode=list&pos=">201-500</a><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=5&mode=list&pos=">501-1000</a><a href="?tag=&area=0&area2=0&time_start=&time_end=&name=都匀三中&org_type=&members=6&mode=list&pos=">1000以上</a>        </li>
+            </ul>
+</div>
+<div id="explode_div"><a href="javascript:void(0);">更多筛选条件</a></div>
+<div class="list_top clearfix">
+    <div class="l">&nbsp;
+        团体登记日期&nbsp;<input name="time_start" type="text" class="ipt1" onclick="new Calendar().show(this);" style="width:80px;" value="">&nbsp;
+        至&nbsp;<input onclick="new Calendar().show(this);" name="time_end" type="text" class="ipt1" style="width:80px;" value="">&nbsp;
+        团体ID&nbsp;<input name="org_id" type="text" class="ipt1" style="width:80px;" value="">&nbsp;
+        团体名称&nbsp;<input name="name" type="text" class="ipt1" style="width:140px;" value="都匀三中">&nbsp;
+        <a href="javascript:void(0);" onclick="$('#sform').submit();" class="but2">搜索</a>
+    </div>
+        <div class="r">
+        <a class="atxt" href="/app/org/list.php" title="列表模式"></a>
+        <a class="amap" href="/app/org/list.php?mode=map" title="地图模式"></a>&nbsp;&nbsp;
+    </div>
+        </div>
+</form>
+</div>
+            <div class="m10">
+                <ul class="list1 clearfix">
+                                <li class="clearfix">
+                    <div class="listimg listimg_org">
+                                                <a href="/app/org/view.php?id=e6OmeZjiaqaw8" title="都匀三中" target="_blank" style="display:inline-block;width:210px;height:210px;background:none;"></a>
+                                            </div>
+                    <div class="listtxt">
+                        <p class="ptitle"><a href="/app/org/view.php?id=IhRgMBfomw4l2" title="都匀三中" target="_blank">都匀三中</a></p>
+                        <p class="prens clearfix"><span class="l">团体人数：0</span><span class="r">&nbsp;&nbsp;</span></p>
+                    </div>
+                    <p class="prank clearfix">
+                        <span class="l">培训满意度<br>5.0</span>
+                        <span class="l">合作满意度<br>5.0</span>
+                        <span class="l">计划符合度<br>5.0</span>
+                    </p>
+                </li>
+                                <li class="clearfix">
+                    <div class="listimg listimg_org">
+                                                <a href="/app/org/view.php?id=rsfiPTf37UlM1" title="都匀三中青年志愿者服务队" target="_blank"><img src="//s.zhiyuanyun.com/qn.zygz.org.cn/avatar/201505/09/thumb_554e04862109a.png"  onerror="this.src='//s.zhiyuanyun.com/qn.zygz.org.cn/avatar/201505/09/554e04862109a.png';"></a>
+                                            </div>
+                    <div class="listtxt">
+                        <p class="ptitle"><a href="/app/org/view.php?id=A1sbBKiYAf3dx" title="都匀三中青年志愿者服务队" target="_blank">都匀三中青年志愿者服务队</a></p>
+                        <p class="prens clearfix"><span class="l">团体人数：4150</span><span class="r">&nbsp;&nbsp;</span></p>
+                    </div>
+                    <p class="prank clearfix">
+                        <span class="l">培训满意度<br>4.97</span>
+                        <span class="l">合作满意度<br>4.91</span>
+                        <span class="l">计划符合度<br>4.97</span>
+                    </p>
+                </li>
+                                </ul>
+            </div>
+            <div class="pagebar" style="margin:10px;"><span class="now_class">1</span><span class="ptpage"> 1 页 / 2 记录</span>&nbsp;&nbsp;跳转&nbsp;<input type="text" class="ipt1" onkeypress="jump_page(this);" style="width:40px;" value="1">&nbsp;页<script>function jump_page(obj){if(event.keyCode == 13){var npage=$(obj).val();var nurl="/app/org/list.php?name=都匀三中&p=1";nurl=nurl.replace(/p=1/,"p="+npage);window.location.href=nurl;}}</script></div>
+            <div style="clear:both;height:10px;"></div>
+        </div>
+        <div class="conr">
+            <div class="tit">推荐团体</div>
+            <div class="boxcon"><ul>
+                        </ul></div>
+            <div class="tit">推荐项目</div>
+            <div class="boxcon"><ul>
+                        </ul></div>
+        </div>
+    </div>
+</div>
+<div class="footer clearfix">
+    <div class="wrap m10">
+        ICP备案编号：<a href="//beian.miit.gov.cn" target="_blank">京ICP备13002525号-7</a>&nbsp;&nbsp;版权所有：志愿贵州<br>
+        <a href="//www.zhiyuanyun.com/cate/zyzg_syzn/" target="_blank">使用指南</a>&nbsp;&nbsp;
+        <a href="//www.zhiyuanyun.com/cate/zyzg_syzn/" target="_blank">使用指南</a>&nbsp;&nbsp;
+		<a href="//www.zhiyuanyun.com/show/1040107.html" target="_blank">联系我们</a>&nbsp;&nbsp;
+		技术支持：<a href="//www.zhiyuanyun.com" target="_blank">志愿云系统</a>&nbsp;&nbsp;<a href="//www.zhiyuanyun.net" target="_blank">志愿云技术</a><br>
+		为了达到最好效果，推荐使用 <a href="//www.microsoft.com/zh-cn/edge" target="_blank">Microsoft Edge</a>或 <a href="//www.firefox.com.cn/" target="_blank">Mozilla Firefox</a>浏览器
+    </div>
+</div>
+<link href="https://css.zhiyuanyun.com/default/kf.css" rel="stylesheet" type="text/css">
+<script type="text/javascript" src="https://css.zhiyuanyun.com/default/kf.js"></script>
+<script type="text/javascript">
+	var kftophtml;
+	kftophtml="<div id=\"kf_menu\" class=\"kf_menu\">";
+	kftophtml=kftophtml+"<a href=\"https://www.zhiyuanyun.com/show/1032305.html\" target=\"_blank\" class=\"kf-btn kf-btn-cz\"><div class=\"txt\">操作指南</div></a>";
+	kftophtml=kftophtml+"<div class=\"kf-btn kf-btn-wx\"><img class=\"wx_pic\" src=\"https://css.zhiyuanyun.com/default/img/zyyzj_wx.gif\"><div class=\"txt\">微信咨询</div></div>";
+	kftophtml=kftophtml+"<div class=\"kf-btn kf-btn-xcx\"><img class=\"xcx_pic\" src=\"https://css.zhiyuanyun.com/default/img/zyy_xcx.png\"><div class=\"txt\">小程序</div></div>";
+	kftophtml=kftophtml+"<div class=\"kf-btn kf-btn-top\"><div class=\"txt\">回到顶部</div></div>";
+	kftophtml=kftophtml+"</div>";
+</script>
+<div id="kf_top"></div>
+<script>
+var _hmt = _hmt || [];
+(function() {
+  var hm = document.createElement("script");
+  hm.src = "https://hm.baidu.com/hm.js?6e998aedad8b74dcc885da4b51e06aee";
+  var s = document.getElementsByTagName("script")[0]; 
+  s.parentNode.insertBefore(hm, s);
+})();
+</script>
+</body>
+</html>
+

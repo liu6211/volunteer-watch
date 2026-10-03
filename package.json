@@ -34,12 +34,13 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "test": "node --test tests/parser.test.mjs tests/live.test.mjs",
-    "test:offline": "node --test tests/parser.test.mjs",
+    "test": "node --test tests/parser.test.mjs tests/search.test.mjs tests/live.test.mjs",
+    "test:offline": "node --test tests/parser.test.mjs tests/search.test.mjs",
     "test:live": "node --test tests/live.test.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "expo lint",
-    "verify:web": "node .tools/verify-web.mjs"
+    "verify:web": "node .tools/verify-web.mjs",
+    "verify:pages": "node .tools/verify-pages.mjs"
   },
   "private": true
 }

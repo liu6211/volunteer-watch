@@ -12,10 +12,12 @@ import React, {
 import { AppState as RNAppState } from 'react-native';
 
 import { normalizeOrgInput, siteLabel } from '../core/url.mjs';
+import { resolveStableOrgId } from '../core/search.mjs';
 import {
   loadState, saveState, clearState, makeWatch,
   addWatch as addWatchOp, removeWatch as removeWatchOp, updateWatch as updateWatchOp,
   updateSettings as updateSettingsOp, pushNotifications, markAllRead, clearNotifications,
+  pushSearchHistory, removeSearchHistory, clearSearchHistory,
 } from './storage';
 import type { AppState, WatchItem, StoredNotification } from './types';
 import { EMPTY_STATE, DEFAULT_SETTINGS, makeWatchKey } from './types';
@@ -44,6 +46,16 @@ export interface StoreValue {
     input: string,
     alias?: string
   ) => Promise<{ key: string; name: string; firstResult?: string }>;
+  /** 从搜索结果添加：内部会把加密链接 id 换成稳定的数字团号 */
+  addWatchFromSearchResult: (
+    host: string,
+    linkId: string,
+    fallbackName: string
+  ) => Promise<{ key: string; name: string; firstResult?: string }>;
+  /** 记一条搜索历史 */
+  recordSearch: (keyword: string) => Promise<void>;
+  removeSearchHistoryItem: (keyword: string) => Promise<void>;
+  clearSearchHistoryAll: () => Promise<void>;
   removeWatch: (key: string) => Promise<void>;
   setWatchEnabled: (key: string, enabled: boolean) => Promise<void>;
   renameWatch: (key: string, alias: string) => Promise<void>;
@@ -179,6 +191,74 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       });
     },
     [enqueue, persist, refreshBgStatus]
+  );
+
+  /**
+   * 从搜索结果添加团体。
+   *
+   * 搜索页给的链接 id 是服务端加密的（每次请求都变），所以这里先把它
+   * 换成页面里的「数字团号」（数据库主键，长期稳定）再保存。
+   */
+  const addWatchFromSearchResult = useCallback(
+    async (host: string, linkId: string, fallbackName: string) => {
+      // 解析放在队列外：这是纯网络请求，不需要占用写队列
+      const stable = await resolveStableOrgId(host, linkId);
+      const id = stable.stableId || linkId;
+      const key = makeWatchKey(host, id);
+
+      return enqueue(async () => {
+        if (stateRef.current.watches.some((w) => w.key === key)) {
+          throw new Error(`「${fallbackName}」已经在监控列表里了`);
+        }
+        const watch = makeWatch({ id, host, url: stable.url });
+        await persist((s) => addWatchOp(s, watch));
+
+        try {
+          const result = await runCheck([watch], false);
+          const updated = result.watches[0];
+          await persist((s) => updateWatchOp(s, watch.key, updated));
+          await registerBackgroundTask(stateRef.current.settings.intervalMinutes);
+          void refreshBgStatus();
+          return {
+            key: watch.key,
+            name: updated.name || fallbackName,
+            firstResult: updated.lastResult,
+          };
+        } catch (e) {
+          const reason = (e as Error).message;
+          await persist((s) => updateWatchOp(s, watch.key, { lastResult: `检查失败：${reason}` }));
+          return {
+            key: watch.key,
+            name: fallbackName,
+            firstResult: `检查失败：${reason}`,
+          };
+        }
+      });
+    },
+    [enqueue, persist, refreshBgStatus]
+  );
+
+  /* ------------------------------------------------ 搜索历史 */
+
+  const recordSearch = useCallback(
+    async (keyword: string) => {
+      await enqueue(async () => { await persist((s) => pushSearchHistory(s, keyword)); });
+    },
+    [enqueue, persist]
+  );
+
+  const removeSearchHistoryItem = useCallback(
+    async (keyword: string) => {
+      await enqueue(async () => { await persist((s) => removeSearchHistory(s, keyword)); });
+    },
+    [enqueue, persist]
+  );
+
+  const clearSearchHistoryAll = useCallback(
+    async () => {
+      await enqueue(async () => { await persist(clearSearchHistory); });
+    },
+    [enqueue, persist]
   );
 
   const removeWatch = useCallback(
@@ -397,14 +477,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<StoreValue>(
     () => ({
       ready, state, checking, lastRunMessage, bg,
-      addWatchFromUrl, removeWatch, setWatchEnabled, renameWatch,
+      addWatchFromUrl, addWatchFromSearchResult,
+      recordSearch, removeSearchHistoryItem, clearSearchHistoryAll,
+      removeWatch, setWatchEnabled, renameWatch,
       checkAll, checkOneWatch, updateSettings,
       markAllNotificationsRead, clearAllNotifications, resetAll,
       refreshBgStatus,
     }),
     [
       ready, state, checking, lastRunMessage, bg,
-      addWatchFromUrl, removeWatch, setWatchEnabled, renameWatch,
+      addWatchFromUrl, addWatchFromSearchResult,
+      recordSearch, removeSearchHistoryItem, clearSearchHistoryAll,
+      removeWatch, setWatchEnabled, renameWatch,
       checkAll, checkOneWatch, updateSettings,
       markAllNotificationsRead, clearAllNotifications, resetAll, refreshBgStatus,
     ]

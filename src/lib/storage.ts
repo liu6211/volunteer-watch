@@ -3,7 +3,7 @@
  * 所有写入都经过这里，避免多处直接读写存储造成状态不一致。
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { EMPTY_STATE, DEFAULT_SETTINGS, makeWatchKey } from './types';
+import { EMPTY_STATE, DEFAULT_SETTINGS, MAX_SEARCH_HISTORY, makeWatchKey } from './types';
 import type { AppState, WatchItem, StoredNotification } from './types';
 import type { OppItem, CountTable } from '../core/parser.mjs';
 
@@ -30,6 +30,9 @@ export async function loadState(): Promise<AppState> {
       watches,
       notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [],
       settings: { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) },
+      searchHistory: Array.isArray(parsed.searchHistory)
+        ? (parsed.searchHistory as string[]).filter((s) => typeof s === 'string')
+        : [],
     };
   } catch (e) {
     console.warn('[storage] 读取状态失败，使用空状态', e);
@@ -110,6 +113,29 @@ export function markAllRead(state: AppState): AppState {
 /** 清空通知历史 */
 export function clearNotifications(state: AppState): AppState {
   return { ...state, notifications: [] };
+}
+
+/* -------------------------------------------------- 搜索历史 */
+
+/** 记一条搜索关键词（去重、最近的排前面、最多 MAX_SEARCH_HISTORY 条） */
+export function pushSearchHistory(state: AppState, keyword: string): AppState {
+  const kw = String(keyword ?? '').trim();
+  if (!kw) return state;
+  const rest = (state.searchHistory || []).filter((s) => s !== kw);
+  return { ...state, searchHistory: [kw, ...rest].slice(0, MAX_SEARCH_HISTORY) };
+}
+
+/** 删掉某一条搜索历史 */
+export function removeSearchHistory(state: AppState, keyword: string): AppState {
+  return {
+    ...state,
+    searchHistory: (state.searchHistory || []).filter((s) => s !== keyword),
+  };
+}
+
+/** 清空搜索历史 */
+export function clearSearchHistory(state: AppState): AppState {
+  return { ...state, searchHistory: [] };
 }
 
 /* ------------------------------------------------------------------ 辅助 */
