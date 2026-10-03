@@ -18,7 +18,7 @@ import { colors, radius as R, spacing, themedStyles } from '../../lib/theme';
 import { Backdrop, Glass, GlassButton, Icon, Tap } from '../../components/ui';
 
 export default function PlanScreen() {
-  const { state, accountSession } = useStore();
+  const { state, accountSession, autoLogin } = useStore();
   const insets = useSafeAreaInsets();
 
   const [headers, setHeaders] = useState<string[]>([]);
@@ -31,15 +31,42 @@ export default function PlanScreen() {
     setLoading(true);
     setError('');
     try {
+      /*
+       * 先主动重新登录一次。
+       *
+       * 志愿云的会话只有 30 分钟（PHPSESSID Max-Age=1800），
+       * 过期后请求会被踢回登录页，fetchGenericPage 会抛「登录已过期」。
+       * 别的页面（项目详情、搜索、账号页）都会先 autoLogin，
+       * 只有排班页原来漏了 —— 结果放置半小时后再进来只会看到报错，
+       * 点「重试」也还是失败，必须手动去登录页。
+       */
+      await autoLogin().catch(() => undefined);
+
       const t = await fetchGenericPage(accountSession(), SEARCH_HOST, '/app/user/plan.php');
       setHeaders(t.headers);
       setRows(t.rows);
     } catch (e) {
-      setError((e as Error).message);
+      const msg = (e as Error).message;
+      // 万一重登之后还是过期，再补一次，仍然不行就如实报错
+      if (/过期|请登录|登录/.test(msg)) {
+        const re = await autoLogin().catch(() => ({ ok: false }));
+        if (re?.ok) {
+          try {
+            const t = await fetchGenericPage(accountSession(), SEARCH_HOST, '/app/user/plan.php');
+            setHeaders(t.headers);
+            setRows(t.rows);
+            return;
+          } catch (e2) {
+            setError((e2 as Error).message);
+            return;
+          }
+        }
+      }
+      setError(msg);
     } finally {
       setLoading(false);
     }
-  }, [state.account, accountSession]);
+  }, [state.account, accountSession, autoLogin]);
 
   useEffect(() => {
     let alive = true;
