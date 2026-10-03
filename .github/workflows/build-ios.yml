@@ -7,16 +7,22 @@ on:
 
 jobs:
   build-ios-unsigned:
-    # ⚠️ 2026-10-03：macos-26 这个标签已经排不上机器了 ——
-    # 任务 4 秒就失败，runner 为空、steps=0，连第一步都没跑。
-    # 换到 macos-15（自带 Xcode 26.3）。
+    # ⚠️ 必须用 macos-26。
     #
-    # 历史上 macos-15 的 Xcode 26.3 会让 expo-modules-jsi 因
-    # Swift 严格并发诊断报错，所以下面保留了 perl 补丁那一步。
+    # 2026-10-03 的排查经过：
+    #   #42~#46 全部秒失败（runner 为空、steps=0）—— 当时误判为 runner 标签问题，
+    #   改成 macos-15 后能跑起来，但 xcodebuild 报错（见下），
+    #   再用 ubuntu 探测才发现【ubuntu 也拿不到机器】→ 真正原因是
+    #   GitHub Actions 额度用完（私有库 2000 分钟/月，macOS 按 10 倍算）。
+    #   仓库改为公开后额度不再受限，于是可以回到原本正确的标签。
     #
-    # 需要 Xcode 版本更高时，可换成 macos-latest 或 macos-15-large，
-    # 并确认 /Applications/Xcode_26*.app 存在。
-    runs-on: macos-15
+    # 为什么不能用 macos-15：它自带 Xcode 26.3，其 Swift 6 严格并发检查会把
+    # expo-modules-jsi 编译失败（上游未修）：
+    #   JavaScriptRuntime.swift:193:43: error: sending 'resultPtr' risks causing data races
+    #   JavaScriptRuntime.swift:786/787/789/829/830/831: 同样的错误，共 7 处
+    #   → ** BUILD FAILED ** PhaseScriptExecution Build ExpoModulesJSI xcframework
+    # macos-26 自带 Xcode 26.6，不存在这个诊断。
+    runs-on: macos-26
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
