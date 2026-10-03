@@ -11,23 +11,17 @@ import {
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { searchOrgs } from '../core/search.mjs';
+import { SEARCH_HOST, GUIZHOU_AREAS, searchOrgs } from '../core/search.mjs';
 import type { OrgSearchItem } from '../core/search.mjs';
 import { useStore } from '../lib/store';
 import { colors, radius as R, spacing, themedStyles } from '../lib/theme';
 import { Backdrop, Glass, GlassButton, Icon, Tap } from '../components/ui';
 
-/** 常用分站（各省分站是独立站点，数据不互通） */
-const SITES: { host: string; label: string }[] = [
-  { host: 'gz.zhiyuanyun.com', label: '贵州' },
-  { host: 'www.zhiyuanyun.com', label: '总站' },
-  { host: 'gd.zhiyuanyun.com', label: '广东' },
-  { host: 'sc.zhiyuanyun.com', label: '四川' },
-  { host: 'hn.zhiyuanyun.com', label: '湖南' },
-  { host: 'js.zhiyuanyun.com', label: '江苏' },
-  { host: 'zj.zhiyuanyun.com', label: '浙江' },
-  { host: 'sd.zhiyuanyun.com', label: '山东' },
-];
+/**
+ * 固定只搜贵州站。
+ * 需求明确：不要扩展到其它省份（各省分站是独立站点，数据不互通）。
+ */
+const HOST = SEARCH_HOST;
 
 export default function SearchScreen() {
   const {
@@ -36,25 +30,24 @@ export default function SearchScreen() {
   } = useStore();
   const insets = useSafeAreaInsets();
 
-  const [host, setHost] = useState('gz.zhiyuanyun.com');
   const [keyword, setKeyword] = useState('');
   const [query, setQuery] = useState('');       // 已提交的关键词
+  const [area, setArea] = useState('0');        // 团体属地，0=全部
   const [items, setItems] = useState<OrgSearchItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [searched, setSearched] = useState(false);
   const [addingId, setAddingId] = useState('');
-  const [siteOpen, setSiteOpen] = useState(false);
 
   const history = state.searchHistory ?? [];
 
-  /** 已监控的团体 key 集合，用于把结果标成「已添加」 */
-  const watchedKeys = new Set(state.watches.map((w) => `${w.host}~${w.id}`));
-
   const doSearch = useCallback(
-    async (kw: string, targetHost = host) => {
+    async (kw: string, areaCode = area) => {
       const q = kw.trim();
-      if (!q) return;
+      if (!q && areaCode === '0') {
+        setError('请输入团体名称，或先选一个属地');
+        return;
+      }
       Keyboard.dismiss();
       setKeyword(q);
       setQuery(q);
@@ -62,9 +55,9 @@ export default function SearchScreen() {
       setError('');
       setSearched(true);
       try {
-        const r = await searchOrgs(targetHost, q);
+        const r = await searchOrgs(HOST, q, { area: areaCode });
         setItems(r.items);
-        if (r.items.length > 0) await recordSearch(q);
+        if (r.items.length > 0 && q) await recordSearch(q);
       } catch (e) {
         setItems([]);
         setError((e as Error).message);
@@ -72,17 +65,16 @@ export default function SearchScreen() {
         setLoading(false);
       }
     },
-    [host, recordSearch]
+    [area, recordSearch]
   );
 
   const onAdd = async (it: OrgSearchItem) => {
     setAddingId(it.linkId);
     setError('');
     try {
-      const res = await addWatchFromSearchResult(host, it.linkId, it.name);
+      const res = await addWatchFromSearchResult(HOST, it.linkId, it.name);
       router.replace(`/team/${res.key}`);
       if (res.firstResult?.startsWith('检查失败')) {
-        // 详情页会显示失败原因，这里不再弹窗打断
         console.warn('[search] 添加后首次抓取失败：', res.firstResult);
       }
     } catch (e) {
@@ -153,32 +145,25 @@ export default function SearchScreen() {
                 ) : null}
               </View>
 
-              {/* 站点选择 */}
-              <Tap onPress={() => setSiteOpen((v) => !v)}>
-                <View style={styles.siteRow}>
-                  <Icon name="location-outline" size={15} color={colors.textDim} />
-                  <Text style={styles.siteLabel}>
-                    搜索范围：{SITES.find((s) => s.host === host)?.label ?? host}
-                  </Text>
-                  <Icon name={siteOpen ? 'chevron-up' : 'chevron-down'} size={15} color={colors.textFaint} />
-                </View>
-              </Tap>
-              {siteOpen ? (
-                <View style={styles.chips}>
-                  {SITES.map((s) => (
-                    <Tap
-                      key={s.host}
-                      onPress={() => { setSiteOpen(false); setHost(s.host); void doSearch(query || keyword, s.host); }}
-                    >
-                      <View style={[styles.chip, host === s.host && styles.chipActive]}>
-                        <Text style={[styles.chipText, host === s.host && styles.chipTextActive]}>
-                          {s.label}
-                        </Text>
-                      </View>
-                    </Tap>
-                  ))}
-                </View>
-              ) : null}
+              {/* 属地筛选：参数和选项都取自站点真实搜索表单 */}
+              <View style={styles.siteRow}>
+                <Icon name="location-outline" size={15} color={colors.textDim} />
+                <Text style={styles.siteLabel}>团体属地</Text>
+              </View>
+              <View style={styles.chips}>
+                {GUIZHOU_AREAS.map((a) => (
+                  <Tap
+                    key={a.code}
+                    onPress={() => { setArea(a.code); void doSearch(query || keyword, a.code); }}
+                  >
+                    <View style={[styles.chip, area === a.code && styles.chipActive]}>
+                      <Text style={[styles.chipText, area === a.code && styles.chipTextActive]}>
+                        {a.label}
+                      </Text>
+                    </View>
+                  </Tap>
+                ))}
+              </View>
 
               <GlassButton
                 label={loading ? '搜索中…' : '搜索'}
@@ -233,7 +218,7 @@ export default function SearchScreen() {
               <Icon name="search-outline" size={26} color={colors.textFaint} />
               <Text style={styles.emptyTitle}>没搜到这个团体</Text>
               <Text style={styles.emptyText}>
-                换个关键词试试；各省分站数据不互通，也可以切换「搜索范围」
+                换个关键词试试，或者把「团体属地」改成「全部」再搜
               </Text>
             </Glass>
           ) : null

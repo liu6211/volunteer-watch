@@ -46,7 +46,9 @@ function GlassTabBar({ state, descriptors, navigation }: MinTabBarProps) {
   const itemW = rowW > 0 ? rowW / routes.length : 0;
 
   /** 镜头位置用「第几个标签」表示，再乘以单项宽度得到像素位移 */
-  const pos = useRef(new Animated.Value(state.index)).current;
+  // 用 useState 的惰性初始化持有这个动画值：
+  // 渲染期间读 useRef(...).current 会触发 React 新规则报错
+  const [pos] = useState(() => new Animated.Value(state.index));
 
   useEffect(() => {
     Animated.spring(pos, {

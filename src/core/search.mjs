@@ -14,8 +14,18 @@
  *   搜索时先拿列表链接定位，再解析出数字 id 存下来。
  */
 
+import { detectCharset, decodeHtml } from './parser.mjs';
+
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+/**
+ * 默认（也是唯一）的搜索站点。
+ *
+ * 需求明确：只在贵州站里搜，不要扩展到其它省份。
+ * 各省分站是独立站点，数据不互通，所以固定用 gz。
+ */
+export const SEARCH_HOST = 'gz.zhiyuanyun.com';
 
 /**
  * @typedef {Object} OrgSearchItem
@@ -26,15 +36,39 @@ const UA =
  */
 
 /**
- * 拼搜索请求地址
- * @param {string} host 站点域名
- * @param {string} keyword 关键词
- * @param {number} [page] 页码，从 1 开始
+ * 贵州站下属的「团体属地」筛选（数据来自站点搜索表单的真实参数）
+ * 需求：只在贵州站里搜，不扩展到其它省份。
  */
-export function searchUrl(host, keyword, page = 1) {
+export const GUIZHOU_AREAS = [
+  { code: '0', label: '全部' },
+  { code: '8152', label: '贵阳市' },
+  { code: '8275', label: '遵义市' },
+  { code: '8163', label: '六盘水市' },
+  { code: '8290', label: '安顺市' },
+  { code: '8306', label: '铜仁市' },
+  { code: '8297', label: '毕节市' },
+  { code: '8326', label: '黔东南' },
+  { code: '8343', label: '黔南' },
+  { code: '8317', label: '黔西南' },
+];
+
+/**
+ * 拼搜索请求地址
+ * 站点真实表单字段：团体名称 = name，团体属地 = area
+ * @param {string} host 站点域名
+ * @param {string} keyword 关键词（可为空，此时只按属地筛）
+ * @param {{ page?: number, area?: string }} [opts]
+ */
+export function searchUrl(host, keyword, opts = {}) {
   const base = `https://${host}/app/org/list.php`;
   const params = new URLSearchParams();
-  params.set('name', keyword);
+  params.set('name', String(keyword ?? '').trim());
+  const area = opts.area ?? '0';
+  if (area && area !== '0') {
+    params.set('area', area);
+    params.set('area2', '0');
+  }
+  const page = opts.page ?? 1;
   if (page > 1) params.set('p', String(page));
   return `${base}?${params.toString()}`;
 }
@@ -136,9 +170,11 @@ export function parseOrgList(html, host = 'gz.zhiyuanyun.com') {
  */
 export async function searchOrgs(host, keyword, opts = {}) {
   const kw = String(keyword ?? '').trim();
-  if (!kw) throw new Error('请输入要搜索的团体名称');
+  const area = opts.area ?? '0';
+  // 关键词和属地至少给一个，否则等于把全站拉出来
+  if (!kw && area === '0') throw new Error('请输入要搜索的团体名称，或先选一个属地');
 
-  const url = searchUrl(host, kw, opts.page ?? 1);
+  const url = searchUrl(host, kw, { page: opts.page ?? 1, area });
   const timeoutMs = opts.timeoutMs ?? 20000;
   const doFetch = opts.fetchImpl || fetch;
 
@@ -153,12 +189,9 @@ export async function searchOrgs(host, keyword, opts = {}) {
     if (!res.ok) throw new Error(`搜索请求失败：HTTP ${res.status}`);
 
     const buf = new Uint8Array(await res.arrayBuffer());
-    const head = new TextDecoder('latin1').decode(buf.subarray(0, 2048));
-    const cm = head.match(/charset\s*=\s*["']?\s*([\w-]+)/i);
-    const cs = (cm ? cm[1] : 'utf-8').toLowerCase();
-    const html = cs.includes('gb')
-      ? new TextDecoder('gb18030').decode(buf)
-      : new TextDecoder('utf-8', { fatal: false }).decode(buf);
+    // 复用 parser 里的编码识别与解码：那里已经避开了 Hermes 不支持的 latin1
+    const charset = detectCharset(res.headers.get('content-type'), buf);
+    const html = decodeHtml(buf, charset);
 
     return parseOrgList(html, host);
   } finally {

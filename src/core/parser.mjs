@@ -63,7 +63,7 @@ export function detectCharset(contentType, bytes) {
 
   if (!cs) {
     // 只看前 4KB，避免大页面浪费
-    const head = new TextDecoder('latin1').decode(bytes.subarray(0, 4096));
+    const head = asciiHead(bytes, 4096);
     const m2 = head.match(/<meta[^>]+charset\s*=\s*["']?\s*([\w-]+)/i);
     if (m2) cs = m2[1];
   }
@@ -73,6 +73,25 @@ export function detectCharset(contentType, bytes) {
     return 'gb18030'; // gb18030 是 gbk/gb2312 的超集
   }
   return 'utf-8';
+}
+
+/**
+ * 把字节当成 ASCII 读成字符串（只看标签用的）。
+ *
+ * ⚠️ 不能用 `new TextDecoder('latin1')`：
+ * 手机上的 Hermes 引擎只支持 utf-8/gb18030 等少数编码，
+ * 遇到 'latin1' 会直接抛 "Unknown encoding: latin1" 把整条链路打断。
+ * 这里手动按字节拼，任何环境都能跑；非 ASCII 字节变成乱码也无所谓，
+ * 因为我们只是用它去找 `charset=` 这种纯 ASCII 标记。
+ *
+ * @param {Uint8Array} bytes
+ * @param {number} n 最多读多少字节
+ */
+export function asciiHead(bytes, n = 4096) {
+  const end = Math.min(n, bytes.length);
+  let out = '';
+  for (let i = 0; i < end; i++) out += String.fromCharCode(bytes[i]);
+  return out;
 }
 
 /**

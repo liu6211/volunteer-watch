@@ -89,7 +89,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   /** 用 ref 保存最新状态，供串行 mutator 读取 */
   const stateRef = useRef(state);
-  stateRef.current = state;
+  // 渲染期间不能写 ref（React 新规则会报错），改在 effect 里同步。
+  // persist() 内部也会同步写一次，所以写队列里读到的一定是最新值。
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   /**
    * 写操作串行队列，防止并发覆盖。
@@ -436,7 +440,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
    * 定时器被反复销毁重建（checkAll 依赖 checking，每次检查都会变）。
    */
   const checkAllRef = useRef(checkAll);
-  checkAllRef.current = checkAll;
+  // 同样不能在渲染期写 ref，放到 effect 里
+  useEffect(() => {
+    checkAllRef.current = checkAll;
+  }, [checkAll]);
 
   /** 有启用的监控项时才需要定时检查（用数量当依赖，避免整个数组变化就重建） */
   const enabledCount = state.watches.filter((w) => w.enabled).length;

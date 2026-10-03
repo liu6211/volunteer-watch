@@ -17,14 +17,18 @@ export interface OrgSearchResult {
   totalPages: number | null;
 }
 
-export function searchUrl(host: string, keyword: string, page?: number): string;
+export function searchUrl(
+  host: string,
+  keyword: string,
+  opts?: { page?: number; area?: string }
+): string;
 
 export function parseOrgList(html: string, host?: string): OrgSearchResult;
 
 export function searchOrgs(
   host: string,
   keyword: string,
-  opts?: { page?: number; timeoutMs?: number; fetchImpl?: typeof fetch }
+  opts?: { page?: number; area?: string; timeoutMs?: number; fetchImpl?: typeof fetch }
 ): Promise<OrgSearchResult>;
 
 export function resolveStableOrgId(
@@ -32,3 +36,9 @@ export function resolveStableOrgId(
   linkId: string,
   opts?: { timeoutMs?: number; fetchImpl?: typeof fetch }
 ): Promise<{ stableId: string | null; url: string }>;
+
+/** 固定使用的搜索站点（贵州站） */
+export const SEARCH_HOST: string;
+
+/** 贵州站下属的属地筛选 */
+export const GUIZHOU_AREAS: { code: string; label: string }[];

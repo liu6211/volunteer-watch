@@ -16,7 +16,6 @@
  */
 
 import { Platform, useColorScheme } from 'react-native';
-import { useMemo } from 'react';
 
 export type Scheme = 'light' | 'dark';
 
@@ -256,16 +255,6 @@ export function themedStyles<T extends Record<string, unknown>>(factory: () => T
     });
   }
   return out as T;
-}
-
-/**
- * 在组件里生成样式。
- * 用法：const styles = useStyles(makeStyles);
- * 其中 makeStyles 是 () => StyleSheet.create({...})。
- */
-export function useStyles<T>(factory: () => T): T {
-  const scheme = useColorScheme();
-  return useMemo(factory, [scheme]);
 }
 
 /** 当前深浅色（给 StatusBar 等非样式场景用） */
