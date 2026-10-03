@@ -98,14 +98,6 @@ export default function HelpEmailScreen() {
           <P>然后点「发送测试邮件」。收到了就说明配好了。</P>
         </Section>
 
-        <Section title="一个要知道的限制">
-          <Warn>
-            发邮件需要原始网络连接，而 <Text style={styles.b}>Expo Go 里没有这个能力</Text>。
-            {'\n\n'}
-            配置信息可以正常保存，但要真正发信，需要装上正式版 App（APK / IPA）。
-          </Warn>
-        </Section>
-
         <Section title="发不出去怎么查">
           <View style={styles.errRow}>
             <Text style={styles.errTitle}>535 认证失败</Text>
