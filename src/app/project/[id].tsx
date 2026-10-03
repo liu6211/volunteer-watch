@@ -11,12 +11,19 @@ import {
   ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import * as Linking from 'expo-linking';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { fetchProject, joinProject } from '../../core/project.mjs';
 import type { OppDetail } from '../../core/project.mjs';
 import { fetchOppTab, OPP_TABS, postComment } from '../../core/account.mjs';
-import { useStore } from '../../lib/store';
+
+const SITE_ORIGIN = 'https://gz.zhiyuanyun.com';
+/**
+ * 站点会拦掉 App 发出的写请求（POST 被 WAF 拦，GET 服务器又不读参数），
+ * 所以涉及「提交数据」的操作失败时，引导用户去浏览器完成 —— 那里是可靠的。
+ */
+const SITE_HINT = '提示：志愿贵州会拦截 App 发出的提交请求。这类操作请点下面的按钮，在浏览器里完成（已登录状态可直接操作）。';import { useStore } from '../../lib/store';
 import { colors, radius as R, spacing, themedStyles } from '../../lib/theme';
 import { Backdrop, Glass, GlassButton, Icon, Tap } from '../../components/ui';
 
@@ -169,8 +176,22 @@ export default function ProjectDetailScreen() {
               }
 
               setResult(r.message);
-              Alert.alert(r.ok ? '报名成功' : '报名未成功', r.message);
-              if (r.ok) void load();
+              if (r.ok) {
+                Alert.alert('报名成功', r.message);
+                void load();
+              } else {
+                /*
+                 * 站点会拦掉 App 发出的写请求（详见 README 里的说明），
+                 * 所以失败时给一条可靠的退路：直接在浏览器里操作。
+                 */
+                Alert.alert('报名未成功', `${r.message}\n\n${SITE_HINT}`, [
+                  { text: '知道了', style: 'cancel' },
+                  {
+                    text: '用浏览器打开',
+                    onPress: () => { void Linking.openURL(`${SITE_ORIGIN}/app/opp/view.php?id=${urlId}`); },
+                  },
+                ]);
+              }
             } catch (e) {
               setResult((e as Error).message);
               Alert.alert('报名出错', (e as Error).message);
