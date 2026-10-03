@@ -12,6 +12,7 @@
  */
 import * as BackgroundTask from 'expo-background-task';
 import * as TaskManager from 'expo-task-manager';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { runCheck } from './checker';
 import { loadState, saveState, pushNotifications } from './storage';
@@ -30,6 +31,35 @@ export function clampInterval(minutes: number): number {
 }
 
 // ---------------------------------------------------------------- 任务定义
+
+/**
+ * 后台任务的运行痕迹。
+ * 存在模块变量里，同时写进存储 —— 这样设置页能显示
+ * 「到底有没有跑过、上次跑是什么时候、失败原因是什么」，
+ * 而不是让用户对着一个「已开启」的开关猜。
+ */
+let lastRunAt: string | null = null;
+let lastError: string | null = null;
+
+const TRACE_KEY = 'volunteer-watch.bg-trace.v1';
+
+async function saveTrace() {
+  try {
+    await AsyncStorage.setItem(TRACE_KEY, JSON.stringify({ lastRunAt, lastError }));
+  } catch { /* 忽略 */ }
+}
+
+async function loadTrace() {
+  try {
+    const raw = await AsyncStorage.getItem(TRACE_KEY);
+    if (raw) {
+      const o = JSON.parse(raw) as { lastRunAt?: string; lastError?: string };
+      lastRunAt = o.lastRunAt ?? null;
+      lastError = o.lastError ?? null;
+    }
+  } catch { /* 忽略 */ }
+}
+void loadTrace();
 
 TaskManager.defineTask(BACKGROUND_TASK_NAME, async () => {
   try {
@@ -68,8 +98,13 @@ TaskManager.defineTask(BACKGROUND_TASK_NAME, async () => {
       }
     }
 
+    lastRunAt = new Date().toISOString();
+    lastError = null;
+    await saveTrace();
     return BackgroundTask.BackgroundTaskResult.Success;
   } catch (e) {
+    lastError = (e as Error).message || String(e);
+    await saveTrace();
     console.warn('[background] 后台检查失败', e);
     return BackgroundTask.BackgroundTaskResult.Failed;
   }
@@ -77,27 +112,39 @@ TaskManager.defineTask(BACKGROUND_TASK_NAME, async () => {
 
 // ---------------------------------------------------------------- 注册管理
 
-/** 注册后台任务 */
+/**
+ * 注册后台任务。
+ *
+ * ⚠️ 之前这里只要 availability !== 'available' 就直接 return，
+ * 而真机上这个探测经常返回 unknown / restricted，
+ * 结果就是【从来没注册过】，开关显示开着但永远不会检查。
+ * 现在改成：不管探测结果如何都尝试注册，并把真实失败原因记下来给界面显示。
+ */
 export async function registerBackgroundTask(intervalMinutes: number): Promise<void> {
-  // 先探测系统是否允许，再注册。
-  // 在 Expo Go 里，宿主 App 的 Info.plist 没有配置
-  // UIBackgroundModes → processing，直接调用 registerTaskAsync 会抛
-  // BackgroundTasksNotConfigured。所以只有确认可用时才注册。
-  const { availability } = await getBackgroundStatus();
-  if (availability !== 'available') {
-    console.log(
-      `[background] 当前环境不支持后台任务（availability=${availability}），已跳过注册。` +
-      '在 Expo Go 里这是正常现象，用正式构建的包才会生效。'
-    );
-    return;
-  }
+  const interval = clampInterval(intervalMinutes);
   try {
     await BackgroundTask.registerTaskAsync(BACKGROUND_TASK_NAME, {
-      minimumInterval: clampInterval(intervalMinutes),
+      minimumInterval: interval,
     });
+    lastError = null;
+    await saveTrace();
+    console.log(`[background] 已注册，最小间隔 ${interval} 分钟`);
   } catch (e) {
-    // 兜底：某些环境 getStatusAsync 会误报可用，这里不让它冒泡成未捕获异常
-    console.log('[background] 注册后台任务失败，已忽略：', (e as Error).message);
+    lastError = (e as Error).message || String(e);
+    await saveTrace();
+    console.log('[background] 注册后台任务失败：', lastError);
+    // 再试一次：某些机型第一次调用会因为初始化未完成而失败
+    try {
+      await BackgroundTask.registerTaskAsync(BACKGROUND_TASK_NAME, {
+        minimumInterval: MIN_INTERVAL_MINUTES,
+      });
+      lastError = null;
+      await saveTrace();
+      console.log('[background] 重试后注册成功');
+    } catch (e2) {
+      lastError = (e2 as Error).message || String(e2);
+      await saveTrace();
+    }
   }
 }
 
@@ -119,6 +166,10 @@ export type BackgroundAvailability = 'available' | 'restricted' | 'unknown';
 export interface BackgroundStatus {
   availability: BackgroundAvailability;
   registered: boolean;
+  /** 最近一次注册失败的原因，null 表示没出错 */
+  lastError: string | null;
+  /** 最近一次后台任务真正跑起来的时间（ISO），null 表示从没跑过 */
+  lastRunAt: string | null;
 }
 
 /** 查询后台任务状态 */
@@ -131,8 +182,9 @@ export async function getBackgroundStatus(): Promise<BackgroundStatus> {
     if (status === BackgroundTask.BackgroundTaskStatus.Available) availability = 'available';
     else if (status === BackgroundTask.BackgroundTaskStatus.Restricted) availability = 'restricted';
 
-    return { availability, registered };
+    await loadTrace();
+    return { availability, registered, lastError, lastRunAt };
   } catch {
-    return { availability: 'unknown', registered: false };
+    return { availability: 'unknown', registered: false, lastError, lastRunAt };
   }
 }

@@ -52,10 +52,7 @@ export const ACCOUNT_FEATURES = [
     key: 'cert', title: '时间证明下载', path: '/app/user/cert.php', kind: 'pdf',
     desc: '生成并下载志愿服务时间证明 PDF', icon: 'document-text-outline',
   },
-  {
-    key: 'plan', title: '我的排班', path: '/app/user/plan.php', kind: 'table',
-    desc: '已安排的志愿服务岗位', icon: 'calendar-outline',
-  },
+
   {
     key: 'train', title: '我的培训', path: '/app/user/train.php?type=checko', kind: 'table',
     desc: '参加过的培训与学时', icon: 'school-outline',

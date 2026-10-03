@@ -37,21 +37,47 @@ async function rnConnect({ host, port, tls }: { host: string; port: number; tls:
       '装上正式版 App 后即可使用。'
     );
   }
-  const Tcp = ((mod as { default?: unknown })?.default || mod) as {
-    connect: (opts: unknown, cb: () => void) => {
-      on: (e: string, cb: (x?: unknown) => void) => void;
-      write: (s: string) => void;
-      end: () => void;
-      destroy: () => void;
-    };
+  type Sock = {
+    on: (e: string, cb: (x?: unknown) => void) => void;
+    write: (s: string) => void;
+    end: () => void;
+    destroy: () => void;
   };
-  if (!Tcp || typeof Tcp.connect !== 'function') {
+  const Tcp = ((mod as { default?: unknown })?.default || mod) as {
+    connect?: (opts: unknown, cb: () => void) => Sock;
+    connectTLS?: (opts: unknown, cb?: () => void) => Sock;
+  };
+
+  if (!Tcp || (typeof Tcp.connectTLS !== 'function' && typeof Tcp.connect !== 'function')) {
     throw new Error('当前环境不支持直接发邮件（缺少 socket 模块），请安装正式版 App。');
   }
 
+  /*
+   * ⚠️ 必须用 connectTLS，不能用 connect({tls:true})。
+   * 这个库把 TLS 做成了独立入口；用 connect 传 tls:true 时
+   * TLS 握手不会真正建立，现象就是「连接一直超时」——这正是之前的 bug。
+   * 回调是 secureConnect 事件，即握手完成才 resolve。
+   */
   return await new Promise((resolve, reject) => {
-    const sock = Tcp.connect({ host, port, tls }, () => resolve(sock));
-    sock.on('error', (e: unknown) => reject(e instanceof Error ? e : new Error(String(e))));
+    const timer = setTimeout(
+      () => reject(new Error('连接邮箱服务器超时（可能是网络或端口被封）')),
+      20000
+    );
+    const done = (sock: Sock) => { clearTimeout(timer); resolve(sock); };
+    const fail = (e: unknown) => { clearTimeout(timer); reject(e instanceof Error ? e : new Error(String(e))); };
+
+    let sock: Sock;
+    try {
+      if (tls && typeof Tcp.connectTLS === 'function') {
+        sock = Tcp.connectTLS({ host, port }, () => done(sock));
+      } else {
+        sock = Tcp.connect!({ host, port }, () => done(sock));
+      }
+    } catch (e) {
+      fail(e);
+      return;
+    }
+    sock.on('error', fail);
   });
 }
 

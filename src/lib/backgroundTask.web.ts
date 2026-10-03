@@ -26,6 +26,10 @@ export type BackgroundAvailability = 'available' | 'restricted' | 'unknown';
 export interface BackgroundStatus {
   availability: BackgroundAvailability;
   registered: boolean;
+  /** 最近一次注册失败的原因（web 上恒为 null） */
+  lastError: string | null;
+  /** 最近一次后台任务运行时间（web 上恒为 null） */
+  lastRunAt: string | null;
 }
 
 /** web 上不支持后台任务 */
@@ -38,5 +42,5 @@ export async function unregisterBackgroundTask(): Promise<void> {
 }
 
 export async function getBackgroundStatus(): Promise<BackgroundStatus> {
-  return { availability: 'restricted', registered: false };
+  return { availability: 'restricted', registered: false, lastError: null, lastRunAt: null };
 }

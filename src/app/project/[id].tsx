@@ -53,7 +53,7 @@ export default function ProjectDetailScreen() {
   }, [load]);
 
   /** 一键报名：先弹确认，再提交 */
-  const onJoin = (jobId: string, postTitle: string) => {
+  const onJoin = (jobId: string, postTitle: string, full = false) => {
     if (!state.account) {
       Alert.alert('还没登录', '报名需要先登录志愿云账号。', [
         { text: '取消', style: 'cancel' },
@@ -63,13 +63,15 @@ export default function ProjectDetailScreen() {
     }
 
     Alert.alert(
-      '确认报名',
+      full ? '名额已满，仍要报名？' : '确认报名',
       `确定报名「${data?.title || '该项目'}」的岗位「${postTitle}」吗？\n\n` +
+      (full ? '这个岗位计划招募人数已经满了，报名后可能不会被录用。\n\n' : '') +
       '提交后会在你的志愿云账号里产生报名记录。',
       [
         { text: '取消', style: 'cancel' },
         {
-          text: '确认报名',
+          text: full ? '仍然报名' : '确认报名',
+          style: full ? 'destructive' : 'default',
           onPress: async () => {
             setJoining(jobId);
             setResult('');
@@ -192,14 +194,35 @@ export default function ProjectDetailScreen() {
             ) : null}
 
             {p.jobId ? (
-              <GlassButton
-                label={joining === p.jobId ? '正在提交…' : '一键报名'}
-                icon={joining === p.jobId ? undefined : 'checkmark-circle-outline'}
-                loading={joining === p.jobId}
-                variant="primary"
-                onPress={() => onJoin(p.jobId, p.title)}
-                style={{ marginTop: spacing.md }}
-              />
+              (() => {
+                /*
+                 * 计划人数 ≤ 已招募人数 → 名额已经满了（或超额）。
+                 * 这时候仍然允许报名，但按钮改成橙色的「谨慎报名」并加一句说明，
+                 * 避免用户以为一点就能录上。
+                 */
+                const full = p.plan !== null && p.joined !== null && p.joined >= p.plan;
+                return (
+                  <>
+                    <GlassButton
+                      label={
+                        joining === p.jobId
+                          ? '正在提交…'
+                          : full ? '谨慎报名（名额已满）' : '一键报名'
+                      }
+                      icon={joining === p.jobId ? undefined : full ? 'alert-circle-outline' : 'checkmark-circle-outline'}
+                      loading={joining === p.jobId}
+                      variant={full ? 'warn' : 'primary'}
+                      onPress={() => onJoin(p.jobId, p.title, full)}
+                      style={{ marginTop: spacing.md }}
+                    />
+                    {full ? (
+                      <Text style={styles.fullHint}>
+                        计划招 {p.plan} 人，已有 {p.joined} 人报名，可能不会被录用
+                      </Text>
+                    ) : null}
+                  </>
+                );
+              })()
             ) : (
               <Text style={styles.noJob}>这个岗位暂时不能报名</Text>
             )}
@@ -276,6 +299,7 @@ const styles = themedStyles(() => StyleSheet.create({
   postValue: { fontSize: 13, color: colors.text, marginTop: 3, lineHeight: 19 },
 
   noJob: { fontSize: 11.5, color: colors.textFaint, marginTop: spacing.md },
+  fullHint: { fontSize: 11, color: colors.warn, marginTop: spacing.sm, lineHeight: 16 },
 
   resultCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
   resultText: { flex: 1, fontSize: 12.5, color: colors.text, lineHeight: 19 },

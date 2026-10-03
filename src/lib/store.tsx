@@ -120,7 +120,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [checking, setChecking] = useState(false);
   const [lastRunMessage, setLastRunMessage] = useState('');
   const [bg, setBg] = useState<BackgroundStatus>({
-    availability: 'unknown', registered: false,
+    availability: 'unknown', registered: false, lastError: null, lastRunAt: null,
   });
 
   /** 用 ref 保存最新状态，供串行 mutator 读取 */

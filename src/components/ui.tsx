@@ -155,16 +155,23 @@ export function GlassButton({
   label: string;
   onPress?: () => void;
   icon?: IconName;
-  variant?: 'primary' | 'glass' | 'danger';
+  variant?: 'primary' | 'glass' | 'danger' | 'warn';
   disabled?: boolean;
   loading?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
   const isPrimary = variant === 'primary';
   const isDanger = variant === 'danger';
+  const isWarn = variant === 'warn';
 
-  const bg = isPrimary ? colors.primary : isDanger ? colors.dangerDim : colors.glass;
-  const fg = isPrimary ? colors.textOnAccent : isDanger ? colors.danger : colors.text;
+  const bg = isPrimary ? colors.primary
+    : isDanger ? colors.dangerDim
+      : isWarn ? colors.warn
+        : colors.glass;
+  const fg = isPrimary ? colors.textOnAccent
+    : isDanger ? colors.danger
+      : isWarn ? '#FFFFFF'
+        : colors.text;
 
   return (
     <Tap onPress={onPress} disabled={disabled || loading} style={style}>
@@ -172,8 +179,10 @@ export function GlassButton({
         style={[
           styles.button,
           { backgroundColor: bg },
-          isPrimary ? buttonShadow() : glassShadow(),
-          !isPrimary && !isDanger ? { borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.glassBorder } : null,
+          isPrimary || isWarn ? buttonShadow() : glassShadow(),
+          !isPrimary && !isDanger && !isWarn
+            ? { borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.glassBorder }
+            : null,
           disabled ? { opacity: 0.5 } : null,
         ]}
       >

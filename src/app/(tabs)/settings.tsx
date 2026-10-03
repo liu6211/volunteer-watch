@@ -102,11 +102,27 @@ export default function SettingsScreen() {
 
   const bgStatusText = (): string => {
     if (!s.backgroundCheckEnabled) return '已关闭';
-    if (bg.availability === 'restricted') {
-      return Platform.OS === 'web' ? '网页版不支持' : '需装正式版本的包（Expo Go 不支持）';
+    if (bg.lastError) return `注册失败：${bg.lastError}`;
+    if (bg.registered) {
+      /*
+       * 说明真实情况，别让用户以为「到点就一定会响」。
+       * iOS / Android 都由系统按省电策略择机执行，不保证准点。
+       *
+       * 这里显示【绝对时间】而不是「X 分钟前」：
+       * 算相对时间要在渲染里调 Date.now()，会被 React 判为渲染中调用非纯函数。
+       */
+      if (bg.lastRunAt) {
+        const d = new Date(bg.lastRunAt);
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const when = `${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        return `已注册 · 上次后台检查：${when}`;
+      }
+      return '已注册，但还没跑过（系统择机执行，可能较久）';
     }
-    if (bg.registered) return '已开启，由系统择机执行';
-    if (bg.availability === 'unknown') return '状态未知';
+    if (bg.availability === 'restricted') {
+      return Platform.OS === 'web' ? '网页版不支持' : '系统限制了后台任务';
+    }
+    if (bg.availability === 'unknown') return '状态未知（系统没给出明确答复）';
     return '未注册';
   };
 
