@@ -29,10 +29,12 @@ export default function LoginScreen() {
   const [captchaHint, setCaptchaHint] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [diag, setDiag] = useState('');
 
   const submit = async () => {
     setBusy(true);
     setError('');
+    setDiag('');
     try {
       const res = await loginAccount(username, password, captcha || undefined);
       if (res.ok) {
@@ -45,6 +47,7 @@ export default function LoginScreen() {
         setCaptchaHint(res.message);
       } else {
         setError(res.message);
+        if (res.diag) setDiag(res.diag);
       }
     } catch (e) {
       setError((e as Error).message);
@@ -129,7 +132,10 @@ export default function LoginScreen() {
             {error ? (
               <View style={styles.errorBox}>
                 <Icon name="alert-circle" size={16} color={colors.danger} />
-                <Text style={styles.errorText}>{error}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.errorText}>{error}</Text>
+                  {diag ? <Text style={styles.diagText}>{diag}</Text> : null}
+                </View>
               </View>
             ) : null}
 
@@ -197,6 +203,7 @@ const styles = themedStyles(() => StyleSheet.create({
     backgroundColor: colors.dangerDim, borderRadius: R.sm, padding: spacing.md,
   },
   errorText: { flex: 1, fontSize: 12.5, color: colors.danger, lineHeight: 18 },
+  diagText: { fontSize: 10.5, color: colors.textFaint, marginTop: 6, lineHeight: 15 },
 
   safeRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',

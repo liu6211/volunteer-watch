@@ -68,7 +68,7 @@ export interface StoreValue {
     username: string,
     password: string,
     captcha?: string
-  ) => Promise<{ ok: boolean; needCaptcha?: boolean; message: string }>;
+  ) => Promise<{ ok: boolean; needCaptcha?: boolean; message: string; diag?: string }>;
   /** 退出登录 */
   logoutAccount: () => Promise<void>;
   /** 用当前会话构造请求用的 session（供账号页取数据） */

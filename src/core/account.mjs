@@ -48,27 +48,42 @@ export function createSession() {
 
 /** 把响应的 Set-Cookie 合并进会话 */
 function absorbCookies(session, res) {
-  let raw = null;
-  try {
-    // RN 上可能返回单个字符串；标准实现允许返回数组
-    raw = typeof res.headers.getSetCookie === 'function'
-      ? res.headers.getSetCookie()
-      : res.headers.get('set-cookie');
-  } catch {
-    raw = null;
-  }
-  if (!raw) return;
+  const collected = [];
 
-  const list = Array.isArray(raw) ? raw : String(raw).split(/,(?=[^;=]+=)/);
+  try {
+    if (typeof res.headers.getSetCookie === 'function') {
+      collected.push(...res.headers.getSetCookie());
+    }
+  } catch { /* 部分平台没有这个方法 */ }
+
+  try {
+    const single = res.headers.get('set-cookie');
+    if (single) collected.push(single);
+  } catch { /* 忽略 */ }
+
+  // 有些平台 get('set-cookie') 拿不到，只能遍历找出所有 header
+  if (collected.length === 0 && typeof res.headers.forEach === 'function') {
+    try {
+      res.headers.forEach((value, key) => {
+        if (String(key).toLowerCase() === 'set-cookie') collected.push(value);
+      });
+    } catch { /* 忽略 */ }
+  }
+
+  if (collected.length === 0) return;
+
   const jar = new Map();
   for (const part of session.cookie.split('; ').filter(Boolean)) {
     const i = part.indexOf('=');
     if (i > 0) jar.set(part.slice(0, i), part.slice(i + 1));
   }
-  for (const c of list) {
-    const pair = String(c).split(';')[0];
-    const i = pair.indexOf('=');
-    if (i > 0) jar.set(pair.slice(0, i).trim(), pair.slice(i + 1).trim());
+  for (const c of collected) {
+    // 一个 header 里可能塞了多个 cookie，按逗号拆（排除 Expires 里的逗号）
+    for (const one of String(c).split(/,(?=[^;=]+=)/)) {
+      const pair = one.split(';')[0];
+      const i = pair.indexOf('=');
+      if (i > 0) jar.set(pair.slice(0, i).trim(), pair.slice(i + 1).trim());
+    }
   }
   session.cookie = [...jar.entries()].map(([k, v]) => `${k}=${v}`).join('; ');
 }
@@ -83,7 +98,8 @@ async function req(session, url, opts = {}) {
   };
   const { fetchImpl: _ignored, ...rest } = opts;
   void _ignored;
-  const res = await doFetch(url, { ...rest, headers, redirect: 'follow' });
+  // credentials: include 让运行环境也参与 Cookie 存取（手机上有用）
+  const res = await doFetch(url, { credentials: 'include', ...rest, headers, redirect: 'follow' });
   absorbCookies(session, res);
   return res;
 }
@@ -129,6 +145,12 @@ export async function login(session, host, username, password, captcha) {
   const m = html.match(/id="seid"\s+value="([^"]*)"/);
   session.seid = m ? m[1] : '';
 
+  /** 诊断信息：登录失败时一并带回，方便定位（尤其手机上的 Cookie 问题） */
+  const diag =
+    `会话Cookie=${session.cookie ? '已获取' : '未获取'}` +
+    ` / seid=${session.seid ? '已获取' : '未获取'}` +
+    ` / 登录页=${html.length}字节`;
+
   // 2. 密码加密（站点用 JSEncrypt 做同样的事）
   const encPass = rsaEncrypt(SITE_PUBKEY, password);
 
@@ -143,6 +165,7 @@ export async function login(session, host, username, password, captcha) {
 
   const res = await req(session, `${base}/app/user/login.php?m=login`, {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
       'X-Requested-With': 'XMLHttpRequest',
@@ -153,10 +176,40 @@ export async function login(session, host, username, password, captcha) {
 
   const text = await res.text();
   let obj = null;
-  try { obj = JSON.parse(text); } catch { /* ignore */ }
+  try {
+    obj = JSON.parse(text);
+  } catch {
+    // 有些情况下 JSON 会被包在 html 里，再捞一次
+    const m = text.match(/\{[\s\S]*\}/);
+    if (m) {
+      try { obj = JSON.parse(m[0]); } catch { /* 还是不行 */ }
+    }
+  }
 
   if (!obj) {
-    return { ok: false, message: `服务器返回了无法识别的内容（HTTP ${res.status}）` };
+    /*
+     * 返回的不是 JSON。
+     * 最常见的原因是：服务器没把这次请求当成登录动作，
+     * 而是直接把「登录页」渲染回来了 —— 通常意味着会话没建立起来
+     * （手机上的 Cookie 处理和电脑不一样）。
+     */
+    const looksLikeLoginPage = /id="seid"|id="ulogin"|登录志愿/.test(text);
+    const snippet = text
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 160);
+
+    return {
+      ok: false,
+      diag,
+      raw: text.slice(0, 600),
+      status: res.status,
+      message: looksLikeLoginPage
+        ? `服务器把请求当成了普通页面访问（返回的是登录页），说明会话没有建立。\n${diag}`
+        : `服务器返回的不是登录结果（HTTP ${res.status}）。\n返回内容：${snippet || '(空)'}\n${diag}`,
+    };
   }
 
   const code = String(obj.code);
