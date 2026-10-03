@@ -38,7 +38,7 @@ test('自造密钥：加密结果能被私钥解密还原', () => {
     privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
   });
 
-  for (const plain of ['REDACTED', 'a', '中文密码测试', 'x'.repeat(100)]) {
+  for (const plain of ['Test-Password-123', 'a', '中文密码测试', 'x'.repeat(100)]) {
     const b64 = rsaEncrypt(publicKey, plain);
     const decrypted = privateDecrypt(
       { key: privateKey, padding: constants.RSA_PKCS1_PADDING },
@@ -49,7 +49,7 @@ test('自造密钥：加密结果能被私钥解密还原', () => {
 });
 
 test('输出长度等于模长（1024 位 = 128 字节 → base64 172 字符）', () => {
-  const b64 = rsaEncrypt(SITE_PEM, 'REDACTED');
+  const b64 = rsaEncrypt(SITE_PEM, 'Test-Password-123');
   assert.equal(Buffer.from(b64, 'base64').length, 128);
   assert.equal(b64.length, 172, '与站点 JSEncrypt 输出长度一致');
 });
@@ -78,6 +78,6 @@ test('内容过长时明确报错', () => {
 });
 
 test('加密结果能被站点公钥对应的算法正常处理（密文长度与 JSEncrypt 一致）', () => {
-  const b64 = rsaEncrypt(SITE_PEM, 'REDACTED');
+  const b64 = rsaEncrypt(SITE_PEM, 'Test-Password-123');
   assert.match(b64, /^[A-Za-z0-9+/]+=*$/, '必须是合法 base64');
 });
