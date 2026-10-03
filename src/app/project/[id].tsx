@@ -8,14 +8,14 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View,
+  ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { fetchProject, joinProject } from '../../core/project.mjs';
 import type { OppDetail } from '../../core/project.mjs';
-import { fetchOppTab, OPP_TABS } from '../../core/account.mjs';
+import { fetchOppTab, OPP_TABS, postComment } from '../../core/account.mjs';
 import { useStore } from '../../lib/store';
 import { colors, radius as R, spacing, themedStyles } from '../../lib/theme';
 import { Backdrop, Glass, GlassButton, Icon, Tap } from '../../components/ui';
@@ -39,6 +39,38 @@ export default function ProjectDetailScreen() {
   const [extraLines, setExtraLines] = useState<string[]>([]);
   const [extraItems, setExtraItems] = useState<{ author: string; time: string; content: string }[]>([]);
   const [extraLoading, setExtraLoading] = useState(false);
+  const [commentText, setCommentText] = useState('');
+  const [commentBusy, setCommentBusy] = useState(false);
+
+  /** 发布评论（讨论区） */
+  const onPostComment = async () => {
+    if (!state.account) {
+      Alert.alert('还没登录', '发布评论需要先登录志愿云账号。', [
+        { text: '取消', style: 'cancel' },
+        { text: '去登录', onPress: () => router.push('/login') },
+      ]);
+      return;
+    }
+    setCommentBusy(true);
+    try {
+      await autoLogin().catch(() => undefined);
+      const r = await postComment(accountSession(), site, {
+        commentType: '1',
+        sourceId: urlId,
+        content: commentText,
+      });
+      Alert.alert(r.ok ? '已发布' : '发布失败', r.message);
+      if (r.ok) {
+        setCommentText('');
+        await openExtra('comment');
+        await openExtra('comment');   // 再点一次展开并刷新列表
+      }
+    } catch (e) {
+      Alert.alert('出错', (e as Error).message);
+    } finally {
+      setCommentBusy(false);
+    }
+  };
 
   const openExtra = async (tab: 'comment' | 'track' | 'hour') => {
     if (extraTab === tab) { setExtraTab(''); return; }
@@ -335,31 +367,55 @@ export default function ProjectDetailScreen() {
         </View>
 
         {extraTab ? (
-          extraLoading ? (
-            <Glass corner={R.lg} style={styles.card}>
-              <ActivityIndicator color={colors.primary} />
-            </Glass>
-          ) : extraItems.length === 0 || extraItems.every((i) => !i.author && !i.content) ? (
-            <Glass corner={R.lg} style={styles.card}>
-              <Text style={styles.extraEmpty}>
-                {extraTab === 'track' ? '这个项目还没有发布动态' : '暂时没有内容'}
-              </Text>
-            </Glass>
-          ) : (
-            /* 每条一张卡片，显示「谁 / 什么时候 / 说了什么」，不再糊成一段 */
-            extraItems.map((item, i) => (
-              <Glass key={i} corner={R.md} style={styles.cmtCard}>
-                <View style={styles.cmtHead}>
-                  <View style={styles.cmtAvatar}>
-                    <Icon name="person" size={13} color={colors.primary} />
-                  </View>
-                  <Text style={styles.cmtAuthor}>{item.author || '匿名志愿者'}</Text>
-                  {item.time ? <Text style={styles.cmtTime}>{item.time}</Text> : null}
-                </View>
-                <Text style={styles.cmtBody}>{item.content}</Text>
+          <>
+            {/* 讨论区可以发评论 */}
+            {extraTab === 'comment' ? (
+              <Glass corner={R.md} style={styles.card}>
+                <TextInput
+                  style={styles.cmtInput}
+                  value={commentText}
+                  onChangeText={setCommentText}
+                  placeholder="说点什么…（需要登录）"
+                  placeholderTextColor={colors.textFaint}
+                  multiline
+                />
+                <GlassButton
+                  label={commentBusy ? '发布中…' : '发布评论'}
+                  icon={commentBusy ? undefined : 'send-outline'}
+                  loading={commentBusy}
+                  variant="primary"
+                  onPress={() => { void onPostComment(); }}
+                  style={{ marginTop: spacing.md }}
+                />
               </Glass>
-            ))
-          )
+            ) : null}
+
+            {extraLoading ? (
+              <Glass corner={R.lg} style={styles.card}>
+                <ActivityIndicator color={colors.primary} />
+              </Glass>
+            ) : extraItems.length === 0 ? (
+              <Glass corner={R.lg} style={styles.card}>
+                <Text style={styles.extraEmpty}>
+                  {extraTab === 'track' ? '这个项目还没有发布动态' : '暂时没有内容'}
+                </Text>
+              </Glass>
+            ) : (
+              /* 每条一张卡片：谁 / 什么时候 / 说了什么，不再糊成一段 */
+              extraItems.map((item, i) => (
+                <Glass key={i} corner={R.md} style={styles.cmtCard}>
+                  <View style={styles.cmtHead}>
+                    <View style={styles.cmtAvatar}>
+                      <Icon name="person" size={13} color={colors.primary} />
+                    </View>
+                    <Text style={styles.cmtAuthor}>{item.author || '匿名志愿者'}</Text>
+                    {item.time ? <Text style={styles.cmtTime}>{item.time}</Text> : null}
+                  </View>
+                  <Text style={styles.cmtBody}>{item.content}</Text>
+                </Glass>
+              ))
+            )}
+          </>
         ) : null}
       </ScrollView>
     </View>
@@ -446,4 +502,11 @@ const styles = themedStyles(() => StyleSheet.create({
   cmtAuthor: { fontSize: 12.5, fontWeight: '700', color: colors.primary },
   cmtTime: { flex: 1, fontSize: 10.5, color: colors.textFaint, textAlign: 'right' },
   cmtBody: { fontSize: 12.5, color: colors.text, lineHeight: 20 },
+  cmtInput: {
+    minHeight: 72, fontSize: 12.5, color: colors.text, lineHeight: 19,
+    backgroundColor: colors.field, borderRadius: R.sm,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.md,
+    borderWidth: StyleSheet.hairlineWidth * 2, borderColor: colors.glassBorder,
+    textAlignVertical: 'top',
+  },
 }));

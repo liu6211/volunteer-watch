@@ -205,6 +205,20 @@ export function fetchOppTab(
   page?: number,
   opts?: { commentType?: string; fetchImpl?: typeof fetch; timeoutMs?: number }
 ): Promise<{ items: OppTabItem[]; lines: string[]; empty: boolean }>;
+
+/** 发布评论 / 回复（接口 m=do_reply，code==='1' 为失败） */
+export function postComment(
+  session: AccountSessionState,
+  host: string,
+  params: {
+    commentType?: string;
+    sourceId: string;
+    content: string;
+    uidReply?: string;
+    parentId?: string;
+  },
+  opts?: { fetchImpl?: typeof fetch; timeoutMs?: number }
+): Promise<{ ok: boolean; message: string }>;
 export function parseMyHours(html: string): MyHoursResult;
 
 export function checkSession(

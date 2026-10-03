@@ -842,11 +842,29 @@ export async function fetchOppTab(session, host, tab, id, page = 1, opts = {}) {
     const html = await res.text();
 
     /*
-     * 站点返回的是一段 HTML 片段。
-     * 直接转成文本会糊成一大段（非常难看），所以这里按「时间戳」切分：
-     * 讨论区/动态的每一条都是「作者 + 时间 + 回复 + 内容」，
-     * 用 YYYY-MM-DD HH:MM:SS 作为分隔点最稳。
+     * ⚠️ 三种标签的返回结构完全不同，不能用同一套解析：
+     *   讨论区 / 项目动态 → 一串「作者 时间 回复 内容」，用时间戳切分
+     *   时长公示          → 标准表格（姓名 | 服务时长 | 备注 | 操作）
+     * 之前只按时间戳切，表格里没有时间戳，就被当成一整段糊在一起了。
      */
+    if (tab === 'hour') {
+      const { headers, rows } = parseGenericTable(html);
+      const idx = (name) => headers.findIndex((h) => h.includes(name));
+      const iName = idx('姓名');
+      const iHour = idx('服务时长');
+      const iMemo = idx('备注');
+      const items = rows.map((cells) => ({
+        author: iName >= 0 ? (cells[iName] || '') : (cells[0] || ''),
+        time: '',
+        content: [
+          iHour >= 0 ? cells[iHour] : '',
+          iMemo >= 0 ? `备注：${cells[iMemo]}` : '',
+        ].filter(Boolean).join('　'),
+      })).filter((it) => it.author || it.content);
+
+      return { items, lines: [], empty: items.length === 0 };
+    }
+
     const clean = String(html)
       .replace(/<script[\s\S]*?<\/script>/gi, ' ')
       // 去掉评论输入表单部分（那不是内容）
@@ -879,6 +897,64 @@ export async function fetchOppTab(session, host, tab, id, page = 1, opts = {}) {
     const empty = items.length === 0 || /暂无|还没有|没有相关|畅所欲言吧/.test(text);
 
     return { items, lines, empty };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * 发布评论 / 回复。
+ *
+ * 实测自 login.js 的 do_reply：
+ *   $.post('/app/api/view.php?m=do_reply', C.form.get_form('#creply'), cb)
+ *   #creply 里的字段（用 id 当键）：comment_type, source_id, content,
+ *   uid_reply, parent_id
+ *   回调里 code == '1' 是错误分支，否则成功。
+ */
+export async function postComment(session, host, params, opts = {}) {
+  if (!session || !session.cookie) return { ok: false, message: '请先登录志愿云账号' };
+  const content = String(params.content || '').trim();
+  if (!content) return { ok: false, message: '评论内容不能为空' };
+
+  const doFetch = opts.fetchImpl || fetch;
+  const body = new URLSearchParams({
+    comment_type: String(params.commentType ?? '1'),
+    source_id: String(params.sourceId ?? ''),
+    content,
+    uid_reply: String(params.uidReply ?? '0'),
+    parent_id: String(params.parentId ?? '0'),
+  });
+
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), opts.timeoutMs ?? REQUEST_TIMEOUT_MS);
+  try {
+    const res = await doFetch(`${origin(host)}/app/api/view.php?m=do_reply`, {
+      method: 'POST',
+      headers: {
+        'User-Agent': UA,
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+        Referer: `${origin(host)}/app/opp/view.php`,
+        ...(session.cookieMode === 'platform' ? {} : { Cookie: session.cookie }),
+      },
+      body: body.toString(),
+      credentials: session.cookieMode === 'platform' ? 'include' : 'omit',
+      signal: ac.signal,
+      redirect: 'follow',
+    });
+    const raw = await res.text();
+    let obj = null;
+    try { obj = JSON.parse(raw); } catch { /* 非 JSON */ }
+    if (!obj) {
+      return { ok: false, message: `服务器返回了无法识别的内容：${textOf(raw).slice(0, 80) || '(空)'}` };
+    }
+    const ok = String(obj.code ?? '') !== '1';
+    return { ok, message: String(obj.msg || '').trim() || (ok ? '评论已发布' : '发布失败') };
+  } catch (e) {
+    if ((e && e.name === 'AbortError') || /aborted|timeout/i.test(String(e && e.message))) {
+      throw new Error('发布评论超时，请检查网络后重试');
+    }
+    throw e;
   } finally {
     clearTimeout(timer);
   }
