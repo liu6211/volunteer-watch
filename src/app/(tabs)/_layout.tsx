@@ -182,15 +182,17 @@ const styles = themedStyles(() => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.xs,
+    // 左右不留内边距：滑块宽度就是 rowWidth / 标签数，
+    // 如果这里再留 4px，滑块会整体右移 4px 并【超出胶囊右边缘】。
+    paddingHorizontal: 0,
   },
 
-  /** 滑动镜头：比单项略窄一点，看起来像嵌在胶囊里 */
+  /** 滑动镜头：宽度与单项严格相等，位置由 translateX 决定 */
   lens: {
     position: 'absolute',
     top: spacing.sm,
     bottom: spacing.sm,
-    left: spacing.xs,
+    left: 0,
     borderRadius: R.pill,
     overflow: 'hidden',
   },

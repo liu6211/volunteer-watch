@@ -21,7 +21,7 @@ import { Backdrop, Glass, GlassButton, Icon, Tap } from '../../components/ui';
 
 export default function ProjectDetailScreen() {
   const { id, host } = useLocalSearchParams<{ id?: string; host?: string }>();
-  const { state, accountSession } = useStore();
+  const { state, accountSession, autoLogin } = useStore();
   const insets = useSafeAreaInsets();
 
   const site = String(host || 'gz.zhiyuanyun.com');
@@ -76,7 +76,29 @@ export default function ProjectDetailScreen() {
             setJoining(jobId);
             setResult('');
             try {
-              const r = await joinProject(accountSession(), site, data?.oppId || '', jobId);
+              let r = await joinProject(accountSession(), site, data?.oppId || '', jobId);
+
+              /*
+               * 志愿云的会话很短（PHPSESSID 只有 30 分钟）。
+               * 会话过期时报名接口会回「访问超时，请按Ctrl+F5…」——
+               * 手机上没有 Ctrl+F5，正确做法是用保存的凭据自动重登再试一次。
+               */
+              if (!r.ok && /访问超时|超时|请登录|重新登录|会话/.test(r.message)) {
+                const re = await autoLogin().catch(() => ({ ok: false, message: '' }));
+                if (re.ok) {
+                  r = await joinProject(accountSession(), site, data?.oppId || '', jobId);
+                  if (r.ok) {
+                    setResult(`（登录已过期，自动重新登录后）${r.message}`);
+                    Alert.alert('报名成功', r.message);
+                    void load();
+                    return;
+                  }
+                }
+                setResult('登录状态已过期，请到「设置」重新登录后再报名');
+                Alert.alert('需要重新登录', '你的志愿云登录状态已过期，请重新登录后再报名。');
+                return;
+              }
+
               setResult(r.message);
               Alert.alert(r.ok ? '报名成功' : '报名未成功', r.message);
               if (r.ok) void load();
