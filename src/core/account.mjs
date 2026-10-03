@@ -104,7 +104,7 @@ const REQUEST_TIMEOUT_MS = 25000;
  */
 async function req(session, url, opts = {}) {
   const doFetch = opts.fetchImpl || fetch;
-  const mode = opts.cookieMode || session.cookieMode || 'platform';
+  const mode = opts.cookieMode || session.cookieMode || 'manual';
   const headers = {
     'User-Agent': UA,
     'Accept-Language': 'zh-CN,zh;q=0.9',
@@ -114,12 +114,20 @@ async function req(session, url, opts = {}) {
   const { fetchImpl: _ignored, timeoutMs = REQUEST_TIMEOUT_MS, cookieMode: _m, ...rest } = opts;
   void _ignored; void _m;
 
+  /*
+   * 手动模式必须用 credentials:'omit'。
+   * 否则 iOS 的 NSURLSession 会把【自己仓库里的】Cookie 也带上，
+   * 结果请求头里同时出现新旧两个 PHPSESSID，
+   * 服务器取到旧的那个 → Cookie 与 seid 不匹配 → 「授权失败」。
+   * omit 让它一个都别带，完全由我们控制。
+   */
+  const credentials = mode === 'manual' ? 'omit' : 'include';
+
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), timeoutMs);
   try {
-    // credentials: include 让运行环境也参与 Cookie 存取
     const res = await doFetch(url, {
-      credentials: 'include',
+      credentials,
       ...rest,
       headers,
       redirect: 'follow',
@@ -188,14 +196,17 @@ async function loginOnce(host, username, password, captcha, cookieMode, fetchImp
   // 2. 密码加密（站点用 JSEncrypt 做同样的事）
   const encPass = rsaEncrypt(SITE_PUBKEY, password);
 
-  // 3. 提交
-  const body = new URLSearchParams({
-    seid: session.seid,
-    uname: username,
-    upass: encPass,
-    referer: '/app/user/home.php',
-  });
-  if (captcha) body.set('uyzm', captcha);
+  // 3. 提交。
+  //    字段名和顺序都对齐浏览器：站点用 C.form.get_form('#ulogin') 取值，
+  //    而它是拿 input 的 id 当键、按 DOM 顺序遍历的。
+  //    ⚠️ uyzm（验证码框）在页面上一直存在（只是隐藏），
+  //    所以浏览器即使没有验证码也会提交一个空串 —— 这里必须照做。
+  const body = new URLSearchParams();
+  body.set('seid', session.seid);
+  body.set('uname', username);
+  body.set('upass', encPass);
+  body.set('referer', '/app/user/home.php');
+  body.set('uyzm', captcha || '');
 
   const res = await req(session, `${base}/app/user/login.php?m=login`, {
     method: 'POST',

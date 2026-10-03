@@ -304,6 +304,65 @@ test('login: 请求超时会翻译成中文提示，而不是一直转圈', asyn
   );
 });
 
+test('login: 提交字段完全对齐浏览器（含空的 uyzm）', async () => {
+  // 站点用 C.form.get_form('#ulogin') 取值：拿 input 的 id 当键、按 DOM 顺序遍历。
+  // 验证码框在页面上一直存在（只是隐藏），所以浏览器即使没有验证码也会提交空串。
+  let postBody = '';
+  let contentType = '';
+  const fake = async (url, opts = {}) => {
+    const isPost = (opts.method || 'GET').toUpperCase() === 'POST';
+    if (isPost) {
+      postBody = opts.body;
+      contentType = opts.headers['Content-Type'];
+    }
+    return {
+      ok: true, status: 200,
+      headers: { get: () => null, getSetCookie: () => [] },
+      text: async () => (isPost
+        ? '{"code":"0","msg":"登录成功"}'
+        : '<html><input type="hidden" id="seid" value="SEID123"></html>'),
+    };
+  };
+
+  await login(createSession(), 'gz.zhiyuanyun.com', 'liu_liuen', 'pw', undefined, { fetchImpl: fake });
+
+  const params = new URLSearchParams(postBody);
+  // 字段齐不齐
+  assert.deepEqual(
+    [...params.keys()],
+    ['seid', 'uname', 'upass', 'referer', 'uyzm'],
+    '字段名与顺序都要和浏览器一致'
+  );
+  assert.equal(params.get('seid'), 'SEID123');
+  assert.equal(params.get('uname'), 'liu_liuen');
+  assert.equal(params.get('referer'), '/app/user/home.php');
+  assert.equal(params.get('uyzm'), '', '没有验证码时也必须提交空串');
+  assert.ok(params.get('upass').length > 100, '密码必须已加密');
+  assert.match(contentType, /x-www-form-urlencoded/);
+});
+
+test('login: 手动 Cookie 模式用 credentials=omit，避免新旧 Cookie 混在一起', async () => {
+  const seen = [];
+  const fake = async (url, opts = {}) => {
+    const isPost = (opts.method || 'GET').toUpperCase() === 'POST';
+    seen.push({ isPost, credentials: opts.credentials, cookie: opts.headers?.Cookie });
+    return {
+      ok: true, status: 200,
+      headers: { get: () => null, getSetCookie: () => [] },
+      text: async () => (isPost
+        ? '{"code":"0","msg":"登录成功"}'
+        : '<html><input type="hidden" id="seid" value="S"></html>'),
+    };
+  };
+  await login(createSession(), 'gz.zhiyuanyun.com', 'u', 'p', undefined, { fetchImpl: fake });
+
+  for (const c of seen) {
+    // 平台模式靠运行环境带 cookie；手动模式必须自己带且不许运行环境插手
+    if (c.cookie) assert.equal(c.credentials, 'omit', '手动带 Cookie 时必须 omit');
+    else assert.equal(c.credentials, 'include');
+  }
+});
+
 /* ------------------------------------------------ 常量与工具 */
 
 test('账号页地址是实测出来的那三个', () => {
