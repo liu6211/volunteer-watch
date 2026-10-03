@@ -235,6 +235,63 @@ test('login: 服务器把登录页返回回来时，明确指出会话没建立'
   assert.ok(r.diag, '应带上诊断信息');
 });
 
+test('login: 第一次「授权失败」会自动换 Cookie 模式重试并成功', async () => {
+  // 模拟 iOS：平台自己管的 Cookie 是旧会话 → 授权失败；
+  // 换成手动带 Cookie 后成功。
+  const calls = [];
+  const fake = async (url, opts = {}) => {
+    const isPost = (opts.method || 'GET').toUpperCase() === 'POST';
+    const manual = !!opts.headers?.Cookie;
+    calls.push(`${isPost ? 'POST' : 'GET'}:${manual ? 'manual' : 'platform'}`);
+
+    if (!isPost) {
+      return {
+        ok: true, status: 200,
+        headers: {
+          get: (k) => (String(k).toLowerCase() === 'set-cookie' ? 'PHPSESSID=abc; path=/' : null),
+          getSetCookie: () => [],
+        },
+        text: async () => '<html><input type="hidden" id="seid" value="S1"></html>',
+      };
+    }
+    const body = manual
+      ? '{"code":"0","msg":"登录成功"}'
+      : '{"code":"1","msg":"授权失败，请按Ctrl+F5键刷新网页试试！"}';
+    return {
+      ok: true, status: 200,
+      headers: { get: () => null, getSetCookie: () => [] },
+      text: async () => body,
+    };
+  };
+
+  const session = createSession();
+  const r = await login(session, 'gz.zhiyuanyun.com', 'someone', 'pw', undefined, { fetchImpl: fake });
+
+  assert.equal(r.ok, true, '重试后应该成功');
+  assert.equal(session.cookieMode, 'manual', '应记住最终生效的模式');
+  // 第 3 次是重试时的 GET：此刻新会话还没有 cookie，所以仍是 platform 形态；
+  // 关键在第 4 次 POST 带上了 Cookie 头
+  assert.deepEqual(calls, ['GET:platform', 'POST:platform', 'GET:platform', 'POST:manual']);
+});
+
+test('login: 站点让按 Ctrl+F5 的提示会翻译成人话（手机没这个键）', async () => {
+  // 两次都失败，且都返回授权失败
+  const fake = async (url, opts = {}) => {
+    const isPost = (opts.method || 'GET').toUpperCase() === 'POST';
+    return {
+      ok: true, status: 200,
+      headers: { get: () => null, getSetCookie: () => [] },
+      text: async () => (isPost
+        ? '{"code":"1","msg":"授权失败，请按Ctrl+F5键刷新网页试试！"}'
+        : '<html><input type="hidden" id="seid" value="S1"></html>'),
+    };
+  };
+  const r = await login(createSession(), 'gz.zhiyuanyun.com', 'u', 'p', undefined, { fetchImpl: fake });
+  assert.equal(r.ok, false);
+  assert.ok(!/Ctrl\+F5/i.test(r.message), '不应把 Ctrl+F5 这种电脑术语丢给手机用户');
+  assert.match(r.message, /网络|会话/);
+});
+
 test('login: 请求超时会翻译成中文提示，而不是一直转圈', async () => {
   const hang = async () => {
     const e = new Error('Aborted');
@@ -260,8 +317,8 @@ test('站点公钥能解析（登录要用它加密密码）', () => {
   assert.match(SITE_PUBKEY, /BEGIN PUBLIC KEY/);
 });
 
-test('createSession: 初始会话为空', () => {
-  assert.deepEqual(createSession(), { cookie: '', seid: '' });
+test('createSession: 初始会话为空，默认让运行环境管 Cookie', () => {
+  assert.deepEqual(createSession(), { cookie: '', seid: '', cookieMode: 'platform' });
 });
 
 test('checkNeedCaptcha: 用 GET 请求（POST 会被站点拦成访问超时）', async () => {

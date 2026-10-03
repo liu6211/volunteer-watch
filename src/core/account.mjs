@@ -41,9 +41,9 @@ export const ACCOUNT_PATHS = {
 
 /* ------------------------------------------------------------ 会话 */
 
-/** @returns {{cookie: string, seid: string}} */
+/** @returns {{cookie: string, seid: string, cookieMode?: 'platform'|'manual'}} */
 export function createSession() {
-  return { cookie: '', seid: '' };
+  return { cookie: '', seid: '', cookieMode: 'platform' };
 }
 
 /** 把响应的 Set-Cookie 合并进会话 */
@@ -91,21 +91,33 @@ function absorbCookies(session, res) {
 /** 单次请求超时（毫秒）。没有它的话网络一卡，登录按钮会一直转圈 */
 const REQUEST_TIMEOUT_MS = 25000;
 
+/**
+ * 请求。会按会话的 cookieMode 决定「要不要自己带 Cookie 头」。
+ *
+ * 为什么要分两种模式（实测结论）：
+ *   服务器会校验 Cookie 与 seid 必须属于同一个会话，
+ *   不匹配就回「授权失败，请按Ctrl+F5键刷新网页试试！」。
+ *   而 iOS 的 NSURLSession 有自己的 Cookie 仓库：
+ *     手动设的 Cookie 头可能被它仓库里的旧会话覆盖，
+ *     于是变成「Cookie 是旧的、seid 是新的」→ 必然授权失败。
+ *   所以先让运行环境自己管（platform），不行再退回自己带（manual）。
+ */
 async function req(session, url, opts = {}) {
   const doFetch = opts.fetchImpl || fetch;
+  const mode = opts.cookieMode || session.cookieMode || 'platform';
   const headers = {
     'User-Agent': UA,
     'Accept-Language': 'zh-CN,zh;q=0.9',
-    ...(session.cookie ? { Cookie: session.cookie } : {}),
+    ...(mode === 'manual' && session.cookie ? { Cookie: session.cookie } : {}),
     ...(opts.headers || {}),
   };
-  const { fetchImpl: _ignored, timeoutMs = REQUEST_TIMEOUT_MS, ...rest } = opts;
-  void _ignored;
+  const { fetchImpl: _ignored, timeoutMs = REQUEST_TIMEOUT_MS, cookieMode: _m, ...rest } = opts;
+  void _ignored; void _m;
 
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), timeoutMs);
   try {
-    // credentials: include 让运行环境也参与 Cookie 存取（手机上有用）
+    // credentials: include 让运行环境也参与 Cookie 存取
     const res = await doFetch(url, {
       credentials: 'include',
       ...rest,
@@ -116,7 +128,6 @@ async function req(session, url, opts = {}) {
     absorbCookies(session, res);
     return res;
   } catch (e) {
-    // 把超时翻译成人话，否则用户只看到一串英文
     if ((e && e.name === 'AbortError') || /aborted|timeout/i.test(String(e && e.message))) {
       throw new Error(`请求超时（${Math.round(timeoutMs / 1000)} 秒无响应），请检查网络后重试`);
     }
@@ -155,30 +166,24 @@ export async function checkNeedCaptcha(session, host, username, opts = {}) {
 }
 
 /**
- * 登录
- * @param {{cookie:string,seid:string}} session
- * @param {string} host
- * @param {string} username
- * @param {string} password
- * @param {string} [captcha] 验证码（服务端要时才需要）
- * @param {{fetchImpl?: typeof fetch}} [opts] 便于测试注入
- * @returns {Promise<{ok: boolean, needCaptcha?: boolean, message: string}>}
+ * 走一次完整的登录流程（自建会话 → 取 seid → 提交）
+ * @param {'platform'|'manual'} cookieMode
  */
-export async function login(session, host, username, password, captcha, opts = {}) {
+async function loginOnce(host, username, password, captcha, cookieMode, fetchImpl) {
   const base = origin(host);
-  const fetchImpl = opts.fetchImpl;
+  const session = createSession();
+  session.cookieMode = cookieMode;
 
   // 1. 建会话 + 取 seid
-  const page = await req(session, `${base}/app/user/login.php`, { fetchImpl });
+  const page = await req(session, `${base}/app/user/login.php`, { fetchImpl, cookieMode });
   const html = await page.text();
   const m = html.match(/id="seid"\s+value="([^"]*)"/);
   session.seid = m ? m[1] : '';
 
-  /** 诊断信息：登录失败时一并带回，方便定位（尤其手机上的 Cookie 问题） */
   const diag =
     `会话Cookie=${session.cookie ? '已获取' : '未获取'}` +
     ` / seid=${session.seid ? '已获取' : '未获取'}` +
-    ` / 登录页=${html.length}字节`;
+    ` / 登录页=${html.length}字节 / 模式=${cookieMode}`;
 
   // 2. 密码加密（站点用 JSEncrypt 做同样的事）
   const encPass = rsaEncrypt(SITE_PUBKEY, password);
@@ -195,7 +200,7 @@ export async function login(session, host, username, password, captcha, opts = {
   const res = await req(session, `${base}/app/user/login.php?m=login`, {
     method: 'POST',
     fetchImpl,
-    credentials: 'include',
+    cookieMode,
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
       'X-Requested-With': 'XMLHttpRequest',
@@ -209,20 +214,13 @@ export async function login(session, host, username, password, captcha, opts = {
   try {
     obj = JSON.parse(text);
   } catch {
-    // 有些情况下 JSON 会被包在 html 里，再捞一次
-    const m = text.match(/\{[\s\S]*\}/);
-    if (m) {
-      try { obj = JSON.parse(m[0]); } catch { /* 还是不行 */ }
+    const mm = text.match(/\{[\s\S]*\}/);
+    if (mm) {
+      try { obj = JSON.parse(mm[0]); } catch { /* 还是不行 */ }
     }
   }
 
   if (!obj) {
-    /*
-     * 返回的不是 JSON。
-     * 最常见的原因是：服务器没把这次请求当成登录动作，
-     * 而是直接把「登录页」渲染回来了 —— 通常意味着会话没建立起来
-     * （手机上的 Cookie 处理和电脑不一样）。
-     */
     const looksLikeLoginPage = /id="seid"|id="ulogin"|登录志愿/.test(text);
     const snippet = text
       .replace(/<script[\s\S]*?<\/script>/gi, ' ')
@@ -233,7 +231,9 @@ export async function login(session, host, username, password, captcha, opts = {
 
     return {
       ok: false,
+      session,
       diag,
+      retryable: false,
       raw: text.slice(0, 600),
       status: res.status,
       message: looksLikeLoginPage
@@ -248,24 +248,78 @@ export async function login(session, host, username, password, captcha, opts = {
     ? String(obj.show).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
     : '';
 
-  if (code === '0') return { ok: true, message: msg || '登录成功' };
+  if (code === '0') {
+    return { ok: true, session, diag, message: msg || '登录成功' };
+  }
 
   /*
-   * ⚠️ code 非 0 有两种完全不同的情况，必须分开：
-   *   1. 需要验证码 —— 提示里会出现「验证码」，此时才该显示验证码输入框
-   *   2. 账号或密码不对 —— 只是普通错误，必须把服务器的原话告诉用户
-   * 早期版本把两者都当成「需要验证码」，导致密码输错时不但不提示，
-   * 反而弹出一个验证码框，用户完全不知道发生了什么。
+   * ⚠️ code 非 0 有三种情况，必须分开：
+   *   1. 需要验证码 —— 提示里会出现「验证码」
+   *   2. 账号或密码不对 —— 普通错误，照实告诉用户
+   *   3. 授权失败（Cookie 与 seid 不匹配）—— 换个 Cookie 模式重试
+   * 早期版本把前两种混为一谈，导致密码输错时不提示、反而弹验证码框。
    */
   const haystack = `${msg} ${show}`;
   const needsCaptcha = /验证码/.test(haystack);
+  const authMismatch = /授权失败|访问超时/.test(haystack);
 
   return {
     ok: false,
-    needCaptcha: needsCaptcha,
-    message: show || msg || (needsCaptcha ? '需要登录验证码' : '登录失败'),
+    session,
     diag,
+    needCaptcha: needsCaptcha,
+    retryable: authMismatch && cookieMode === 'platform',
+    message: needsCaptcha
+      ? (show || msg || '需要登录验证码')
+      : authMismatch
+        // 站点原话是「请按Ctrl+F5刷新网页」——手机上没有这个键，翻译成人话
+        ? '登录被服务器拒绝了（会话校验没通过），正在自动重试…'
+        : (msg || show || '登录失败'),
   };
+}
+
+/**
+ * 登录
+ *
+ * 会先用「交给运行环境管 Cookie」的方式试一次；
+ * 如果服务器回「授权失败」（Cookie 与 seid 不匹配），
+ * 再用「自己带 Cookie 头」的方式重试一次。
+ * 两种模式覆盖 iOS 与安卓在 Cookie 行为上的差异。
+ *
+ * @param {{cookie:string,seid:string,cookieMode?:string}} session
+ * @param {string} host
+ * @param {string} username
+ * @param {string} password
+ * @param {string} [captcha] 验证码（服务端要时才需要）
+ * @param {{fetchImpl?: typeof fetch}} [opts] 便于测试注入
+ * @returns {Promise<{ok: boolean, needCaptcha?: boolean, message: string}>}
+ */
+export async function login(session, host, username, password, captcha, opts = {}) {
+  const first = await loginOnce(host, username, password, captcha, 'platform', opts.fetchImpl);
+
+  if (first.ok || first.needCaptcha || !first.retryable) {
+    Object.assign(session, first.session);
+    const { session: _s, retryable: _r, ...rest } = first;
+    void _s; void _r;
+    return rest;
+  }
+
+  // 授权失败 → 换成手动带 Cookie 再试一次
+  const second = await loginOnce(host, username, password, captcha, 'manual', opts.fetchImpl);
+  Object.assign(session, second.session);
+  const { session: _s2, retryable: _r2, ...rest2 } = second;
+  void _s2; void _r2;
+
+  if (!second.ok && !second.needCaptcha && /授权失败|访问超时|会话校验/.test(second.message)) {
+    return {
+      ...rest2,
+      message:
+        '登录被服务器拒绝了（会话校验一直没通过）。\n' +
+        '这通常是网络环境（代理 / VPN）导致的，请切换网络后重试。\n' +
+        second.diag,
+    };
+  }
+  return rest2;
 }
 
 /** 退出登录（尽力而为，失败也不影响本地清会话） */
