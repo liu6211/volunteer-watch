@@ -526,8 +526,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       await applyCheckResult(result, { notify: true });
 
       const failed = result.items.filter((it) => !it.ok).length;
+      const firstRuns = result.items.filter((it) => it.firstRun).length;
       const parts: string[] = [];
-      parts.push(result.totalNew > 0 ? `发现 ${result.totalNew} 个新项目` : '没有新项目');
+      if (result.totalNew > 0) {
+        parts.push(`发现 ${result.totalNew} 个新项目`);
+      } else if (firstRuns > 0 && firstRuns === result.items.length) {
+        // 全部都是首次检查：只是登记基准，说明白免得用户以为漏报
+        parts.push('首次检查，已登记现有项目（以后有新项目才会通知）');
+      } else {
+        parts.push('没有新项目');
+      }
       if (failed > 0) parts.push(`${failed} 个团体检查失败`);
       setLastRunMessage(parts.join('，'));
     } catch (e) {
@@ -546,7 +554,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         const result = await enqueue(() => runCheck([watch], false));
         await applyCheckResult(result, { notify: true });
         setLastRunMessage(
-          result.totalNew > 0 ? `${watch.name}：发现 ${result.totalNew} 个新项目` : `${watch.name}：没有新项目`
+          result.totalNew > 0
+            ? `${watch.name}：发现 ${result.totalNew} 个新项目`
+            : result.items[0]?.firstRun
+              ? `${watch.name}：首次检查，已登记现有项目`
+              : `${watch.name}：没有新项目`
         );
       } catch (e) {
         setLastRunMessage(`检查出错：${(e as Error).message}`);

@@ -17,6 +17,8 @@ export interface CheckOneResult {
   ok: boolean;
   /** 成功抓取时的快照 */
   snapshot?: OrgSnapshot;
+  /** 是否是【首次检查】（只登记基准，不通知） */
+  firstRun?: boolean;
 }
 
 /**
@@ -27,12 +29,27 @@ export async function checkOne(watch: WatchItem): Promise<CheckOneResult> {
   try {
     const snapshot = await fetchOrgSnapshot(watch.url, { host: watch.host, timeoutMs: 20000 });
 
+    /*
+     * 首次检查没有基准，findNewProjects 会把全部项目都当成「新的」。
+     * 这时不能通知 —— 否则一添加监控就会收到几十条推送，
+     * 全是早就存在的项目。所以首次只登记基准。
+     */
+    const firstRun = !watch.knownCounts || Object.keys(watch.knownCounts).length === 0;
+
     const detected = findNewProjects(snapshot.projects, watch.knownCounts);
     const newItems = detected.map((d) => d.item);
+    const total = snapshot.projects.length;
 
-    const message = newItems.length
-      ? `发现 ${newItems.length} 个新项目`
-      : `没有新项目（共 ${snapshot.projects.length} 个）`;
+    /*
+     * 文案要说清楚「首次检查为什么不通知」——
+     * 否则用户看到「没有新项目（共 20 个）」会想：
+     * 这 20 个它是怎么知道不算新的？为什么一个都没提醒？
+     */
+    const message = firstRun
+      ? `已登记 ${total} 个现有项目（首次检查只记录基准，以后有新项目才会通知）`
+      : newItems.length
+        ? `发现 ${newItems.length} 个新项目`
+        : `没有新项目（共 ${total} 个）`;
 
     return {
       watch: applySnapshotToWatch(watch, snapshot, message),
@@ -40,6 +57,7 @@ export async function checkOne(watch: WatchItem): Promise<CheckOneResult> {
       message,
       ok: true,
       snapshot,
+      firstRun,
     };
   } catch (e) {
     const message = `检查失败：${(e as Error).message}`;
@@ -65,6 +83,8 @@ export interface CheckRunItem {
   body: string;
   ok: boolean;
   message: string;
+  /** 首次检查（只登记基准，不通知） */
+  firstRun: boolean;
 }
 
 export interface CheckRunResult {
@@ -107,6 +127,7 @@ export async function runCheck(
         body: text.body,
         ok: true,
         message: r.message,
+        firstRun: false,
       });
     } else if (!r.ok) {
       items.push({
@@ -117,6 +138,20 @@ export async function runCheck(
         body: r.message,
         ok: false,
         message: r.message,
+        firstRun: false,
+      });
+    } else if (r.firstRun) {
+      // 首次检查没有基准，只是登记。放进 items 里只为让界面能说明白，
+      // newItems 是空的 —— 所以不会触发通知。
+      items.push({
+        orgId: w.id,
+        orgName: w.name,
+        newItems: [],
+        title: '',
+        body: '',
+        ok: true,
+        message: r.message,
+        firstRun: true,
       });
     }
   }
