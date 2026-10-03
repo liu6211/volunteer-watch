@@ -20,7 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import {
-  bgGradient, buttonShadow, colors, glassShadow, radius as R, spacing,
+  bgGradient, buttonShadow, colors, glassShadow, radius as R, spacing, useScheme,
 } from '../lib/theme';
 import { themedStyles } from '../lib/theme';
 
@@ -36,15 +36,30 @@ export function Icon({
 
 /* ------------------------------------------------------------------ 背景 */
 
-/** 页面背景：一层很淡的多色渐变，给玻璃面板提供可感知的底色 */
+/**
+ * 页面背景：一层很淡的多色渐变，给玻璃面板提供可感知的底色。
+ *
+ * ⚠️ 这里必须用 key 强制重建渐变：
+ * expo-linear-gradient 在 web/某些平台上会把首次算出的 CSS 缓存住，
+ * 只换 colors 不会重绘 —— 切换深色模式时会变成「深色文字 + 浅色背景」，
+ * 结果整页看不清。key 一变就重新挂载，绕开这个缓存。
+ * 另外垫一层纯色底，即使渐变还没跟上也不会出现「白底白字」。
+ */
 export function Backdrop() {
+  const scheme = useScheme();
   return (
-    <LinearGradient
-      colors={bgGradient()}
-      start={{ x: 0.1, y: 0 }}
-      end={{ x: 0.9, y: 1 }}
-      style={StyleSheet.absoluteFill}
-    />
+    <View
+      key={scheme}
+      style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg }]}
+      pointerEvents="none"
+    >
+      <LinearGradient
+        colors={bgGradient()}
+        start={{ x: 0.1, y: 0 }}
+        end={{ x: 0.9, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+    </View>
   );
 }
 
@@ -61,17 +76,21 @@ export function Glass({
   strong?: boolean;
 }) {
   const android = Platform.OS === 'android';
+  // 非 iOS 平台（安卓 + web）都没有可靠的系统材质，
+  // 统一垫一层半透明底色，保证任何平台/版本下颜色都跟主题一致
+  const needsFallback = Platform.OS !== 'ios';
   return (
     <View style={[{ borderRadius: corner, overflow: 'hidden' }, glassShadow(), style]}>
       <BlurView
         intensity={intensity}
-        // 深浅色各用一套系统材质
+        // 深浅色各用一套系统材质（iOS）
         tint={Platform.OS === 'ios' ? colors.blurTint : 'light'}
-        // 安卓 12 以下会自动退化成半透明，所以下面垫了底色
         blurMethod={android ? 'dimezisBlurViewSdk31Plus' : undefined}
         style={[
           StyleSheet.absoluteFill,
-          android ? { backgroundColor: strong ? colors.glassStrong : colors.glass } : null,
+          needsFallback
+            ? { backgroundColor: strong ? colors.glassStrong : colors.glass }
+            : null,
         ]}
       />
       {/* 高光描边 */}

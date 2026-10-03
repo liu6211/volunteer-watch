@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStore } from '../lib/store';
 import { colors, radius as R, spacing } from '../lib/theme';
 import { themedStyles } from '../lib/theme';
-import { Glass, GlassButton, Icon, Tap } from '../components/ui';
+import { Backdrop, Glass, GlassButton, Icon, Tap } from '../components/ui';
 
 /** 示例链接：只留实测可用的那个 */
 const EXAMPLES = [
@@ -85,9 +85,10 @@ export default function AddTeamScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.screen}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      <View style={styles.screen}>
+        <Backdrop />
+      <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 64 }]}
@@ -192,7 +193,8 @@ export default function AddTeamScreen() {
         </Glass>
       </ScrollView>
     </KeyboardAvoidingView>
-  );
+ </View>
+     );
 }
 
 const styles = themedStyles(() => StyleSheet.create({

@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, radius, spacing } from '../lib/theme';
 import { themedStyles } from '../lib/theme';
-import { Glass, GroupTitle, Icon } from '../components/ui';
+import { Backdrop, Glass, GroupTitle, Icon } from '../components/ui';
 
 /* ------------------------------------------------------------------ 小组件 */
 
@@ -89,9 +89,10 @@ function Link({ url, label }: { url: string; label: string }) {
 export default function EmailHelpScreen() {
   const insets = useSafeAreaInsets();
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + 64 }]}
+      <View style={styles.screen}>
+        <Backdrop />
+      <ScrollView
+            contentContainerStyle={[styles.content, { paddingTop: insets.top + 64 }]}
     >
       <Stack.Screen options={{ title: '邮箱通知怎么配' }} />
 
@@ -248,7 +249,8 @@ export default function EmailHelpScreen() {
         </P>
       </Section>
     </ScrollView>
-  );
+ </View>
+     );
 }
 
 /* ------------------------------------------------------------------ 样式 */

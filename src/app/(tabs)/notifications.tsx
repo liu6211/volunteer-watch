@@ -9,7 +9,7 @@ import { useStore } from '../../lib/store';
 import { colors, radius as R, spacing, formatTime } from '../../lib/theme';
 import { themedStyles } from '../../lib/theme';
 import type { StoredNotification } from '../../lib/types';
-import { Glass, Icon, Tap } from '../../components/ui';
+import { Backdrop, Glass, Icon, Tap } from '../../components/ui';
 
 export default function NotificationsScreen() {
   const { state, markAllNotificationsRead, clearAllNotifications } = useStore();
@@ -55,6 +55,7 @@ export default function NotificationsScreen() {
 
   return (
     <View style={styles.screen}>
+      <Backdrop />
       <FlatList
         data={list}
         keyExtractor={(n) => n.id}

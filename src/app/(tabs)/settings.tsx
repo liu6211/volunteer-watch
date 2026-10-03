@@ -22,7 +22,7 @@ import {
 } from '../../lib/email';
 import * as Device from 'expo-device';
 import {
-  Badge, Divider, Glass, GlassButton, GroupTitle, Icon, Tap, type IconName,
+  Backdrop, Badge, Divider, Glass, GlassButton, GroupTitle, Icon, Tap, type IconName,
 } from '../../components/ui';
 
 /** 可选检查间隔 */
@@ -165,9 +165,10 @@ export default function SettingsScreen() {
   };
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={[
+      <View style={styles.screen}>
+        <Backdrop />
+      <ScrollView
+            contentContainerStyle={[
         styles.content,
         { paddingTop: insets.top + 56, paddingBottom: 170 },
       ]}
@@ -415,7 +416,8 @@ export default function SettingsScreen() {
           : `Android 说明：后台检查最短间隔 ${MIN_INTERVAL_MINUTES} 分钟，系统会按省电策略择机执行。`}
       </Text>
     </ScrollView>
-  );
+ </View>
+     );
 }
 
 const styles = themedStyles(() => StyleSheet.create({

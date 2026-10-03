@@ -146,6 +146,9 @@ export default function TabsLayout() {
         headerShown: false,
         // 自绘 tabBar，隐藏默认的
         tabBarStyle: { display: 'none' },
+        // ⚠️ 必须让场景容器透明，否则导航器自带的浅灰底色会盖住全局渐变背景，
+        //    深色模式下就变成「深色文字 + 浅灰背景」，整页看不清
+        sceneStyle: { backgroundColor: 'transparent' },
       }}
     >
       <Tabs.Screen name="index" options={{ title: '团体' }} />

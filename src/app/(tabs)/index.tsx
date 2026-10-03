@@ -14,7 +14,7 @@ import { useStore, displayName, siteLabel } from '../../lib/store';
 import { colors, radius as R, spacing, timeAgo, glassShadow } from '../../lib/theme';
 import { themedStyles } from '../../lib/theme';
 import type { WatchItem } from '../../lib/types';
-import { Glass, GlassButton, Icon, Tap } from '../../components/ui';
+import { Backdrop, Glass, GlassButton, Icon, Tap } from '../../components/ui';
 
 export default function TeamsScreen() {
   const { ready, state, checking, lastRunMessage, checkAll, setWatchEnabled, removeWatch } =
@@ -51,10 +51,12 @@ export default function TeamsScreen() {
 
   const intervalLabel = (m: number) => (m % 60 === 0 ? `${m / 60} 小时` : `${m} 分钟`);
 
-  const autoCheckHint =
-    state.settings.backgroundCheckEnabled && watches.some((w) => w.enabled)
-      ? ` · 每 ${intervalLabel(state.settings.intervalMinutes)}自动检查`
-      : ' · 自动检查已关闭';
+  /** 自动检查的可见提示：没有任何监控项时不显示，免得误报「已关闭」 */
+  const autoCheckHint = (() => {
+    if (!watches.some((w) => w.enabled)) return '';
+    if (!state.settings.backgroundCheckEnabled) return ' · 自动检查已关闭';
+    return ` · 每 ${intervalLabel(state.settings.intervalMinutes)}自动检查`;
+  })();
 
   const onDelete = (w: WatchItem) => {
     Alert.alert(
@@ -139,6 +141,7 @@ export default function TeamsScreen() {
 
   return (
     <View style={styles.screen}>
+      <Backdrop />
       <FlatList
         data={watches}
         keyExtractor={(w) => w.key}

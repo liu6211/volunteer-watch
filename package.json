@@ -26,7 +26,8 @@
     "@expo/ngrok": "^4.1.3",
     "@types/react": "~19.2.2",
     "react-native-web": "~0.21.3",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "puppeteer-core": "^25.12.0"
   },
   "scripts": {
     "start": "expo start",
@@ -37,7 +38,8 @@
     "test:offline": "node --test tests/parser.test.mjs",
     "test:live": "node --test tests/live.test.mjs",
     "typecheck": "tsc --noEmit",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "verify:web": "node .tools/verify-web.mjs"
   },
   "private": true
 }

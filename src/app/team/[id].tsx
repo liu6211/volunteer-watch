@@ -16,7 +16,7 @@ import { useStore, displayName } from '../../lib/store';
 import { colors, radius as R, spacing, timeAgo, statusColor } from '../../lib/theme';
 import { themedStyles } from '../../lib/theme';
 import type { OppItem } from '../../lib/types';
-import { Badge, Divider, Glass, GlassButton, Icon, Tap } from '../../components/ui';
+import { Backdrop, Badge, Divider, Glass, GlassButton, Icon, Tap } from '../../components/ui';
 
 export default function TeamDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -105,6 +105,7 @@ export default function TeamDetailScreen() {
 
   return (
     <View style={styles.screen}>
+      <Backdrop />
       <Stack.Screen options={{ title: displayName(watch) }} />
 
       <FlatList
