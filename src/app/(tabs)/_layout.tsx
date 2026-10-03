@@ -9,7 +9,7 @@
  *     镜头内部是更强的模糊 + 高光描边，模拟液态玻璃的凸透镜观感。
  *     （真正的折射/放大需要 GPU 着色器，纯 RN 做不到，这里是近似。）
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Platform, StyleSheet, Text, View } from 'react-native';
 import { Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -51,17 +51,29 @@ function GlassTabBar({ state, descriptors, navigation }: MinTabBarProps) {
   // 渲染期间读 useRef(...).current 会触发 React 新规则报错
   const [pos] = useState(() => new Animated.Value(state.index));
 
+  /*
+   * ⚠️ 位移节点必须用 useMemo 固定住。
+   * Animated.multiply 每调用一次就产生一个新的节点；
+   * 如果放在渲染里直接算，每次切标签都会换一个新节点，
+   * 加上 useNativeDriver 之后动画跑在【已被替换掉的旧节点】上，
+   * 表现就是「高亮块不滑动、直接跳过去」。
+   */
+  const lensTranslate = useMemo(
+    () => Animated.multiply(pos, itemW || 1),
+    [pos, itemW]
+  );
+
   useEffect(() => {
     Animated.spring(pos, {
       toValue: state.index,
       useNativeDriver: true,
-      damping: 20,
-      stiffness: 190,
-      mass: 0.75,
+      // 参数调得有弹性一点，看起来才像液态滑动
+      damping: 16,
+      stiffness: 170,
+      mass: 0.7,
+      overshootClamping: false,
     }).start();
   }, [state.index, pos]);
-
-  const lensTranslate = itemW > 0 ? Animated.multiply(pos, itemW) : 0;
 
   return (
     <View
