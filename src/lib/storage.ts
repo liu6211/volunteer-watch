@@ -33,6 +33,20 @@ export async function loadState(): Promise<AppState> {
       searchHistory: Array.isArray(parsed.searchHistory)
         ? (parsed.searchHistory as string[]).filter((s) => typeof s === 'string')
         : [],
+      // 会话里只应存在 username/cookie/seid，这里做一次白名单过滤，
+      // 防止旧数据里混进不该留的字段
+      account:
+        parsed.account && typeof parsed.account === 'object' && parsed.account.username
+          ? {
+              username: String(parsed.account.username),
+              cookie: String(parsed.account.cookie || ''),
+              seid: String(parsed.account.seid || ''),
+              loginAt: String(parsed.account.loginAt || new Date().toISOString()),
+              lastSyncAt: parsed.account.lastSyncAt
+                ? String(parsed.account.lastSyncAt)
+                : undefined,
+            }
+          : null,
     };
   } catch (e) {
     console.warn('[storage] 读取状态失败，使用空状态', e);

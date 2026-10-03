@@ -99,6 +99,14 @@ function ThemedApp() {
             options={{ headerShown: true, title: '搜索团体' }}
           />
           <Stack.Screen
+            name="login"
+            options={{ headerShown: true, title: '登录志愿云' }}
+          />
+          <Stack.Screen
+            name="account"
+            options={{ headerShown: true, title: '我的志愿云' }}
+          />
+          <Stack.Screen
             name="help-email"
             options={{ headerShown: true, title: '邮箱通知怎么配' }}
           />

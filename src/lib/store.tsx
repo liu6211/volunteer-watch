@@ -12,7 +12,12 @@ import React, {
 import { AppState as RNAppState } from 'react-native';
 
 import { normalizeOrgInput, siteLabel } from '../core/url.mjs';
-import { resolveStableOrgId } from '../core/search.mjs';
+import { resolveStableOrgId, SEARCH_HOST } from '../core/search.mjs';
+import {
+  login as loginAccountApi, logout as logoutAccountApi,
+  createSession, checkSession,
+} from '../core/account.mjs';
+import type { AccountSession } from './types';
 import {
   loadState, saveState, clearState, makeWatch,
   addWatch as addWatchOp, removeWatch as removeWatchOp, updateWatch as updateWatchOp,
@@ -56,6 +61,22 @@ export interface StoreValue {
   recordSearch: (keyword: string) => Promise<void>;
   removeSearchHistoryItem: (keyword: string) => Promise<void>;
   clearSearchHistoryAll: () => Promise<void>;
+
+  /* ---------------------------------------------------- 志愿云账号 */
+  /** 登录（密码只在内存里用于本次请求，绝不落盘） */
+  loginAccount: (
+    username: string,
+    password: string,
+    captcha?: string
+  ) => Promise<{ ok: boolean; needCaptcha?: boolean; message: string }>;
+  /** 退出登录 */
+  logoutAccount: () => Promise<void>;
+  /** 用当前会话构造请求用的 session（供账号页取数据） */
+  accountSession: () => { cookie: string; seid: string };
+  /** 检查会话是否还有效 */
+  verifyAccount: () => Promise<boolean>;
+  /** 记录一次成功同步 */
+  markAccountSynced: () => Promise<void>;
   removeWatch: (key: string) => Promise<void>;
   setWatchEnabled: (key: string, enabled: boolean) => Promise<void>;
   renameWatch: (key: string, alias: string) => Promise<void>;
@@ -264,6 +285,71 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     },
     [enqueue, persist]
   );
+
+  /* ------------------------------------------------ 志愿云账号 */
+
+  const accountSession = useCallback(() => {
+    const a = stateRef.current.account;
+    return a ? { cookie: a.cookie, seid: a.seid } : { cookie: '', seid: '' };
+  }, []);
+
+  const loginAccount = useCallback(
+    async (username: string, password: string, captcha?: string) => {
+      const uname = username.trim();
+      if (!uname) return { ok: false, message: '请输入用户名' };
+      if (!password) return { ok: false, message: '请输入密码' };
+
+      // 用全新会话登录：复用旧 Cookie 可能带上过期的会话状态
+      const session = createSession();
+      const res = await loginAccountApi(session, SEARCH_HOST, uname, password, captcha);
+
+      if (!res.ok) return res;
+
+      const next: AccountSession = {
+        username: uname,
+        cookie: session.cookie,
+        seid: session.seid,
+        loginAt: new Date().toISOString(),
+      };
+      await enqueue(async () => {
+        await persist((s) => ({ ...s, account: next }));
+      });
+
+      // 顺便确认会话真的能读到数据
+      void checkSession(session, SEARCH_HOST).then((r) => {
+        if (!r.ok) console.warn('[account] 登录成功但会话校验未通过，可能需要重新登录');
+      });
+
+      return { ok: true, message: res.message || '登录成功' };
+    },
+    [enqueue, persist]
+  );
+
+  const logoutAccount = useCallback(async () => {
+    const a = stateRef.current.account;
+    if (a) {
+      // 尽力通知服务器退出，失败也无所谓，本地照清
+      void logoutAccountApi({ cookie: a.cookie, seid: a.seid }, SEARCH_HOST);
+    }
+    await enqueue(async () => {
+      await persist((s) => ({ ...s, account: null }));
+    });
+  }, [enqueue, persist]);
+
+  const verifyAccount = useCallback(async () => {
+    const a = stateRef.current.account;
+    if (!a) return false;
+    const r = await checkSession({ cookie: a.cookie, seid: a.seid }, SEARCH_HOST);
+    return r.ok;
+  }, []);
+
+  const markAccountSynced = useCallback(async () => {
+    await enqueue(async () => {
+      await persist((s) =>
+        s.account ? { ...s, account: { ...s.account, lastSyncAt: new Date().toISOString() } } : s
+      );
+    });
+  }, [enqueue, persist]);
 
   const removeWatch = useCallback(
     async (key: string) => {
@@ -486,6 +572,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ready, state, checking, lastRunMessage, bg,
       addWatchFromUrl, addWatchFromSearchResult,
       recordSearch, removeSearchHistoryItem, clearSearchHistoryAll,
+      loginAccount, logoutAccount, accountSession, verifyAccount, markAccountSynced,
       removeWatch, setWatchEnabled, renameWatch,
       checkAll, checkOneWatch, updateSettings,
       markAllNotificationsRead, clearAllNotifications, resetAll,
@@ -495,6 +582,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ready, state, checking, lastRunMessage, bg,
       addWatchFromUrl, addWatchFromSearchResult,
       recordSearch, removeSearchHistoryItem, clearSearchHistoryAll,
+      loginAccount, logoutAccount, accountSession, verifyAccount, markAccountSynced,
       removeWatch, setWatchEnabled, renameWatch,
       checkAll, checkOneWatch, updateSettings,
       markAllNotificationsRead, clearAllNotifications, resetAll, refreshBgStatus,

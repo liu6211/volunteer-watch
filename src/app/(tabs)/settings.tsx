@@ -69,7 +69,15 @@ function Row({
 }
 
 export default function SettingsScreen() {
-  const { state, updateSettings, resetAll, bg, refreshBgStatus } = useStore();
+  const { state, updateSettings, resetAll, bg, refreshBgStatus, logoutAccount } = useStore();
+
+  /** 退出登录（二次确认，避免误点） */
+  const onLogoutPress = () => {
+    Alert.alert('退出登录', '退出后将看不到「我的项目」等数据，随时可以再登回来。', [
+      { text: '取消', style: 'cancel' },
+      { text: '退出', style: 'destructive', onPress: () => { void logoutAccount(); } },
+    ]);
+  };
   const s = state.settings;
   const insets = useSafeAreaInsets();
 
@@ -174,6 +182,44 @@ export default function SettingsScreen() {
       ]}
     >
       <Text style={styles.pageTitle}>设置</Text>
+
+      {/* ------------------------------------------------ 账号（最上方） */}
+      <GroupTitle>志愿云账号</GroupTitle>
+      <Glass corner={R.lg} padded={false}>
+        {state.account ? (
+          <>
+            <Row
+              icon="person-circle-outline"
+              title={state.account.username}
+              subtitle={`已登录 · ${new Date(state.account.loginAt).toLocaleDateString()}`}
+              onPress={() => router.push('/account')}
+              right={<Badge text="我的数据" tone="primary" />}
+            />
+            <Divider inset={64} />
+            <Row
+              icon="albums-outline"
+              title="我的项目 / 我的团体 / 服务时长"
+              subtitle="点这里查看"
+              onPress={() => router.push('/account')}
+            />
+            <Divider inset={64} />
+            <Row
+              icon="log-out-outline"
+              title="退出登录"
+              subtitle="只清除本机保存的登录状态"
+              onPress={onLogoutPress}
+            />
+          </>
+        ) : (
+          <Row
+            icon="log-in-outline"
+            title="未登录"
+            subtitle="登录后可查看我的项目、我的团体、服务时长"
+            onPress={() => router.push('/login')}
+            right={<Badge text="去登录" tone="primary" />}
+          />
+        )}
+      </Glass>
 
       {/* ------------------------------------------------ 外观 */}
       <GroupTitle>外观</GroupTitle>

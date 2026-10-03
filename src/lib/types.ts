@@ -99,6 +99,25 @@ export interface AppSettings {
   emailLogErrors: boolean;
 }
 
+/**
+ * 已登录的账号会话。
+ *
+ * ⚠️ 只存会话 Cookie，【绝不存密码】。
+ * 会话过期后让用户重新登录即可。
+ */
+export interface AccountSession {
+  /** 登录用的用户名（志愿者编号也行） */
+  username: string;
+  /** 会话 Cookie（PHPSESSID） */
+  cookie: string;
+  /** 登录页里的 seid 令牌 */
+  seid: string;
+  /** 登录时间（ISO） */
+  loginAt: string;
+  /** 上次成功拉取数据的时间 */
+  lastSyncAt?: string;
+}
+
 /** 整个应用的持久化状态 */
 export interface AppState {
   version: number;
@@ -107,6 +126,8 @@ export interface AppState {
   settings: AppSettings;
   /** 团体搜索历史（最近在前，最多 12 条） */
   searchHistory: string[];
+  /** 志愿云账号会话，未登录为 null */
+  account: AccountSession | null;
 }
 
 /** 搜索历史最多保留几条 */
@@ -133,4 +154,5 @@ export const EMPTY_STATE: AppState = {
   notifications: [],
   settings: DEFAULT_SETTINGS,
   searchHistory: [],
+  account: null,
 };
