@@ -224,17 +224,68 @@ print('bgIds    :', d.get('BGTaskSchedulerPermittedIdentifiers'))
 
 ---
 
-## 五、邮箱通知接口怎么启用
+## 五、邮箱通知怎么配
 
-接口已经写好并接进流程了，默认关闭。启用只需两步：
+App 内置 **站内教程页**（设置 → 邮箱通知 → 📖 配置教程），下面是概要。
 
-1. 打开 `src/lib/email.ts`，填 `SMTP_CONFIG`（两种方案任选其一）：
-   - **方案 A（推荐）**：填 `relayEndpoint`，指向你自己的中转接口
-   - **方案 B**：填 `apiEndpoint` / `apiKey` / `from`，用 Resend、SendGrid 等邮件服务商的 HTTP API
-2. 在 App 的「设置 → 邮箱通知」里打开开关，并填收件邮箱
+### 为什么不能直接连 QQ 邮箱
 
-> React Native 里没有内置 SMTP 客户端，直连 SMTP 需要原生模块，
-> 所以推荐走 HTTP 接口（方案 A / B）。未配置时 `sendMail()` 会静默返回失败，不会报错打扰用户。
+React Native 的 JS 层**没有原始 TCP socket**，连不上 `smtp.qq.com:465`。
+能直连的第三方库（`react-native-smtp-tcp`、`@dfmanosalva/react-native-smtp-mailer`）
+在 npm 上都已标记废弃，引入会破坏构建。所以走 HTTP 发送通道。
+
+### 三条路，任选一条
+
+| 通道 | 需要服务器 | 特点 |
+|---|---|---|
+| **Brevo** | ❌ 不需要 | **最省事**。把你的 QQ 邮箱验证为发件人，纯 HTTP，免费 300 封/天 |
+| Resend | ❌ 不需要 | 纯 HTTP，免费 100 封/天。未验证域名时只能发给注册邮箱 |
+| 自建中转 | ✅ 需要 | 想让 QQ 邮箱直接当发件人就走这条，仓库已附脚本 |
+
+配置位置：**设置 → 邮箱通知**，选通道 → 填对应字段 → 点「发送测试邮件」验证。
+
+### QQ 邮箱授权码怎么拿
+
+1. QQ 邮箱网页版 → 设置 → 账号
+2. 开启 **IMAP/SMTP服务**（需短信验证）
+3. 弹出 **16 位授权码**，复制
+
+> ⚠️ 授权码 **不是** QQ 登录密码。填密码会得到
+> `535 Login fail. Account is abnormal, service is not open, password is ...`
+
+### 自建中转（tools/qq-mail-relay）
+
+零依赖之外只依赖 nodemailer。启动方式见
+[tools/qq-mail-relay/README.md](tools/qq-mail-relay/README.md)。
+
+```bash
+cd tools/qq-mail-relay
+npm install
+$env:QQ_USER="你的QQ@qq.com"; $env:QQ_AUTH_CODE="16位授权码"; node server.js
+```
+
+启动后会打印可直接填进 App 的地址（形如 `http://192.168.x.x:3000/`）。
+
+### 接口契约
+
+```
+POST <中转地址>
+{"to":"收件人","subject":"标题","text":"正文","from":"可选"}
+成功 → 200 {"ok":true,"messageId":"..."}
+失败 → 4xx/5xx {"ok":false,"error":"可读原因"}
+```
+
+这套契约有 **15 项自动化测试**：
+
+```bash
+cd tools/qq-mail-relay
+node test-relay.mjs http://127.0.0.1:3000
+```
+
+### 配置存在哪
+
+API Key / 中转地址存在**手机本地**（AsyncStorage），明文。
+不会上传到任何地方，但手机被别人拿到可能看到，建议用单独申请的 Key。
 
 ---
 

@@ -27,6 +27,30 @@ export default function TeamsScreen() {
     .sort()
     .pop();
 
+  /**
+   * 顶部状态文案。
+   * lastRunMessage 只存在于内存里，App 一重载就没了；而 lastResult 是持久化的。
+   * 所以内存为空时要回退到「最近检查过的那个团体」的结果，
+   * 否则会出现「明明卡片显示有结果，顶部却说从未检查过」的矛盾。
+   */
+  const mostRecentResult = watches
+    .filter((w) => w.lastCheckedAt && w.lastResult)
+    .sort((a, b) => (a.lastCheckedAt! < b.lastCheckedAt! ? 1 : -1))[0]?.lastResult;
+
+  const statusText = checking
+    ? '正在检查…'
+    : lastRunMessage || mostRecentResult || '还没检查过，点下方按钮检查';
+
+  /** 把间隔分钟数写成「15 分钟 / 1 小时 / 3 小时」 */
+  const intervalLabel = (m: number) =>
+    m % 60 === 0 ? `${m / 60} 小时` : `${m} 分钟`;
+
+  /** 自动检查开着且有启用的团体时，给个可见提示，否则用户不知道它在跑 */
+  const autoCheckHint =
+    state.settings.backgroundCheckEnabled && watches.some((w) => w.enabled)
+      ? ` · 每 ${intervalLabel(state.settings.intervalMinutes)}自动检查`
+      : ' · 自动检查已关闭';
+
   const onDelete = (w: WatchItem) => {
     Alert.alert(
       '删除监控',
@@ -100,14 +124,19 @@ export default function TeamsScreen() {
         {checking ? (
           <ActivityIndicator size="small" color={colors.primary} />
         ) : (
-          <Text style={styles.statusIcon}>{lastRunMessage ? '✅' : 'ℹ️'}</Text>
+          <Text style={styles.statusIcon}>
+            {(lastRunMessage || mostRecentResult) ? '✅' : 'ℹ️'}
+          </Text>
         )}
         <View style={{ flex: 1 }}>
           <Text style={[styles.statusText, checking && { color: colors.primary }]}>
-            {checking ? '正在检查…' : lastRunMessage || '还没检查过，下拉或点下方按钮'}
+            {statusText}
           </Text>
-          {!checking && lastCheckedAt ? (
-            <Text style={styles.statusTime}>上次检查：{timeAgo(lastCheckedAt)}</Text>
+          {!checking ? (
+            <Text style={styles.statusTime}>
+              {lastCheckedAt ? `上次检查：${timeAgo(lastCheckedAt)}` : '还没有检查记录'}
+              {autoCheckHint}
+            </Text>
           ) : null}
         </View>
       </View>

@@ -7,6 +7,9 @@
 import React, {
   createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
 } from 'react';
+// 别名导入：本项目自己也有一个数据类型叫 AppState（应用持久化状态），
+// 不能和 React Native 的 AppState（前后台状态）重名。
+import { AppState as RNAppState } from 'react-native';
 
 import { normalizeOrgInput, siteLabel } from '../core/url.mjs';
 import {
@@ -24,7 +27,7 @@ import {
   registerBackgroundTask, unregisterBackgroundTask, getBackgroundStatus, clampInterval,
 } from './backgroundTask';
 import type { BackgroundStatus } from './backgroundTask';
-import { sendNewProjectsMail } from './email';
+import { sendNewProjectsMail, mailConfigFromSettings } from './email';
 
 /** 模块加载时就设置好前台通知展示行为 */
 configureNotificationHandler();
@@ -73,10 +76,25 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  /** 写操作串行队列，防止并发覆盖 */
+  /**
+   * 写操作串行队列，防止并发覆盖。
+   *
+   * ⚠️ 必须带超时保护：
+   * iOS 把 App 切到后台时会冻结 JS 定时器。若某次 fetch 卡住，它自身的
+   * AbortController 定时器也不会触发，这个 Promise 就永远不结算，
+   * 队列被永久堵死 —— 之后每次「立即检查」都只是排在它后面，界面毫无反应。
+   * 加一层 Promise.race 超时，保证队列一定能继续往前走。
+   */
   const queueRef = useRef<Promise<unknown>>(Promise.resolve());
-  const enqueue = useCallback(<T,>(fn: () => Promise<T>): Promise<T> => {
-    const next = queueRef.current.then(fn, fn);
+  const enqueue = useCallback(<T,>(fn: () => Promise<T>, timeoutMs = 45000): Promise<T> => {
+    const guarded = () =>
+      Promise.race<T>([
+        fn(),
+        new Promise<T>((_, reject) =>
+          setTimeout(() => reject(new Error('操作超时（超过 45 秒）')), timeoutMs)
+        ),
+      ]);
+    const next = queueRef.current.then(guarded, guarded);
     // 保证队列不会因为某次失败而中断
     queueRef.current = next.catch(() => undefined);
     return next;
@@ -232,11 +250,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // 邮箱通知（默认关闭；未配置时 sendMail 会静默返回）
+      // 邮箱通知（默认关闭；未配置时 sendMail 会返回可读的失败原因）
       if (settings.emailEnabled && settings.emailTo) {
+        const mailCfg = mailConfigFromSettings(settings);
         for (const it of result.items) {
           if (it.ok && it.newItems.length > 0) {
-            await sendNewProjectsMail(it.orgName, it.newItems, settings.emailTo).catch(() => undefined);
+            const r = await sendNewProjectsMail(mailCfg, it.orgName, it.newItems, settings.emailTo);
+            if (!r.ok) {
+              console.warn('[email] 发送失败：', r.reason);
+            }
           }
         }
       }
@@ -319,6 +341,51 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       void refreshBgStatus();
     });
   }, [enqueue, refreshBgStatus]);
+
+  /* ------------------------------------------------ 前台定时自动检查 */
+
+  /**
+   * 用 ref 持有最新的 checkAll，避免把它放进 effect 依赖里导致
+   * 定时器被反复销毁重建（checkAll 依赖 checking，每次检查都会变）。
+   */
+  const checkAllRef = useRef(checkAll);
+  checkAllRef.current = checkAll;
+
+  /** 有启用的监控项时才需要定时检查（用数量当依赖，避免整个数组变化就重建） */
+  const enabledCount = state.watches.filter((w) => w.enabled).length;
+  const { backgroundCheckEnabled, intervalMinutes } = state.settings;
+
+  useEffect(() => {
+    if (!ready) return;
+    if (!backgroundCheckEnabled) return;
+    if (enabledCount === 0) return;
+
+    // 前台轮询间隔：至少 1 分钟，按用户设置走
+    const periodMs = Math.max(1, Math.round(intervalMinutes)) * 60 * 1000;
+
+    /** 只在 App 处于前台时才检查，避免后台无意义地跑 */
+    const isActive = () => RNAppState.currentState === 'active';
+
+    const timer = setInterval(() => {
+      if (isActive()) {
+        void checkAllRef.current();
+      }
+    }, periodMs);
+
+    // 从后台切回前台时立刻检查一次（iOS 会冻结后台定时器，等定时器不可靠）
+    const sub = RNAppState.addEventListener('change', (next) => {
+      if (next === 'active') {
+        void checkAllRef.current();
+      }
+    });
+
+    console.log(`[auto] 前台自动检查已开启，间隔 ${intervalMinutes} 分钟`);
+
+    return () => {
+      clearInterval(timer);
+      sub.remove();
+    };
+  }, [ready, backgroundCheckEnabled, intervalMinutes, enabledCount]);
 
   const value = useMemo<StoreValue>(
     () => ({

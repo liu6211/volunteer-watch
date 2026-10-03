@@ -1,0 +1,13 @@
+{
+  "name": "qq-mail-relay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "让「志愿项目监控」App 通过 QQ 邮箱发送通知的中转服务",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "nodemailer": "^6.9.16"
+  }
+}

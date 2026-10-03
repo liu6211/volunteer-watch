@@ -61,6 +61,14 @@ export default function RootLayout() {
               headerBackTitle: '返回',
             }}
           />
+          <Stack.Screen
+            name="help-email"
+            options={{
+              headerShown: true,
+              title: '邮箱通知怎么配',
+              headerBackTitle: '返回',
+            }}
+          />
         </Stack>
       </StoreProvider>
     </SafeAreaProvider>
