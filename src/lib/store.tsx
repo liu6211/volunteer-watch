@@ -638,12 +638,36 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
     }, periodMs);
 
-    // 从后台切回前台时立刻检查一次（iOS 会冻结后台定时器，等定时器不可靠）
-    const sub = RNAppState.addEventListener('change', (next) => {
-      if (next === 'active') {
+    /**
+     * 「补一次」检查。
+     *
+     * 定时器只在 App 处于前台时走。用户把 App 切到后台、或者开发时每次
+     * 热重载，计时器都会被重置 —— 结果就是界面上写着「每 15 分钟自动检查」，
+     * 实际过了 22 分钟一次都没查。
+     *
+     * 所以回到前台时先比一下：距上次检查有没有超过一个间隔，
+     * 超过了才立刻补一次。这样既有「按间隔自动检查」的效果，
+     * 又不会每次切前台都白跑一遍。
+     */
+    const catchUp = () => {
+      const ws = stateRef.current.watches.filter((w) => w.enabled);
+      if (ws.length === 0) return;
+      const last = Math.max(
+        0,
+        ...ws.map((w) => Date.parse(w.lastCheckedAt || '') || 0)
+      );
+      if (Date.now() - last >= periodMs) {
         void checkAllRef.current();
       }
+    };
+
+    // 从后台切回前台时补一次（iOS 会冻结后台定时器，等定时器不可靠）
+    const sub = RNAppState.addEventListener('change', (next) => {
+      if (next === 'active') catchUp();
     });
+
+    // 这个 effect 刚建立时也补一次，覆盖「App 冷启动」的情况
+    catchUp();
 
     console.log(`[auto] 前台自动检查已开启，间隔 ${intervalMinutes} 分钟`);
 
