@@ -37,8 +37,24 @@ export async function checkOne(watch: WatchItem): Promise<CheckOneResult> {
     const firstRun = !watch.knownCounts || Object.keys(watch.knownCounts).length === 0;
 
     const detected = findNewProjects(snapshot.projects, watch.knownCounts);
-    const newItems = detected.map((d) => d.item);
     const total = snapshot.projects.length;
+    const baselineSize = Object.keys(watch.knownCounts || {}).length;
+
+    /**
+     * 防「翻页补全」引发的误报。
+     *
+     * 抓取逻辑一旦修正（例如本次补上翻页，20 → 399），
+     * 旧基准就过时了 —— 这时 detected 会是几百个，但那不是
+     * 「新办了 379 个项目」，而是基准本身没跟上。
+     * 直接把几百条推给用户是一种骚扰，所以这种情况只重建基准、不通知。
+     *
+     * 判据：新增数同时超过 50 条、且超过旧基准的两倍。
+     * 正常监控场景下一天新增几个到十几个，不会触发。
+     */
+    const suspicious =
+      baselineSize > 0 && detected.length > Math.max(50, baselineSize * 2);
+
+    const newItems = suspicious ? [] : detected.map((d) => d.item);
 
     /*
      * 文案要说清楚「首次检查为什么不通知」——
@@ -47,9 +63,11 @@ export async function checkOne(watch: WatchItem): Promise<CheckOneResult> {
      */
     const message = firstRun
       ? `已登记 ${total} 个现有项目（首次检查只记录基准，以后有新项目才会通知）`
-      : newItems.length
-        ? `发现 ${newItems.length} 个新项目`
-        : `没有新项目（共 ${total} 个）`;
+      : suspicious
+        ? `项目数从 ${baselineSize} 变成 ${total}，已按新列表重建基准（不当作新增，避免误报）`
+        : newItems.length
+          ? `发现 ${newItems.length} 个新项目`
+          : `没有新项目（共 ${total} 个）`;
 
     return {
       watch: applySnapshotToWatch(watch, snapshot, message),
