@@ -15,8 +15,8 @@ import { Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 
-import { Glass, Icon, Tap, type IconName } from '../../components/ui';
-import { colors, radius as R, spacing, themedStyles } from '../../lib/theme';
+import { Backdrop, Glass, Icon, Tap, type IconName } from '../../components/ui';
+import { colors, getScheme, radius as R, spacing, themedStyles } from '../../lib/theme';
 
 /** 每个标签对应一个扁平图标（选中/未选中两态） */
 const TAB_META: Record<string, { label: string; on: IconName; off: IconName }> = {
@@ -67,6 +67,13 @@ function GlassTabBar({ state, descriptors, navigation }: MinTabBarProps) {
       style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}
       pointerEvents="box-none"
     >
+      {/*
+        标签栏这一层也必须有背景。
+        导航器容器自带一层浅色底（React Navigation 默认主题的 rgb(242,242,242)），
+        而各页面的渐变只画在页面内部，覆盖不到这里 ——
+        深色模式下标签栏周围就会发白。这里补一层渐变把它压掉。
+      */}
+      <Backdrop />
       <Glass corner={R.pill} padded={false} intensity={62} style={styles.bar}>
         <View style={styles.row} onLayout={(e) => setRowW(e.nativeEvent.layout.width)}>
           {/* 滑动镜头：垫在图标下面 */}
@@ -77,7 +84,7 @@ function GlassTabBar({ state, descriptors, navigation }: MinTabBarProps) {
             >
               <BlurView
                 intensity={85}
-                tint={Platform.OS === 'ios' ? colors.blurTint : 'light'}
+                tint={Platform.OS === 'ios' ? colors.blurTint : (getScheme() === 'dark' ? 'dark' : 'light')}
                 blurMethod={Platform.OS === 'android' ? 'dimezisBlurViewSdk31Plus' : undefined}
                 style={[
                   StyleSheet.absoluteFill,

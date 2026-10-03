@@ -85,9 +85,8 @@ export default function SettingsScreen() {
 
   /* 文本框用本地 state，失焦时才写回设置，避免每敲一个字就存一次 */
   const [emailTo, setEmailTo] = useState(s.emailTo);
-  const [relayUrl, setRelayUrl] = useState(s.emailRelayUrl);
-  const [apiKey, setApiKey] = useState(s.emailApiKey);
-  const [fromEmail, setFromEmail] = useState(s.emailFrom);
+  const [mailUser, setMailUser] = useState(s.emailUser);
+  const [mailPass, setMailPass] = useState(s.emailPass);
 
   const [sendingMail, setSendingMail] = useState(false);
   const [mailResultText, setMailResultText] = useState('点这里发一封，立刻知道配置对不对');
@@ -348,14 +347,6 @@ export default function SettingsScreen() {
       <GroupTitle>邮箱通知</GroupTitle>
       <Glass corner={R.lg} padded={false}>
         <Row
-          icon="book-outline"
-          title="配置教程"
-          subtitle="QQ 授权码怎么拿、三种发送方式怎么选"
-          onPress={() => router.push('/help-email')}
-          right={<Icon name="chevron-forward" size={16} color={colors.textFaint} />}
-        />
-        <Divider inset={64} />
-        <Row
           icon="mail-outline"
           title="发现新项目时发邮件"
           subtitle={mailCheck.ok ? `已配置：${PROVIDER_LABELS[s.emailProvider].name}` : mailCheck.reason}
@@ -368,6 +359,47 @@ export default function SettingsScreen() {
           }
         />
         <Divider inset={64} />
+
+        {/* 发信邮箱（自己的 QQ 邮箱） */}
+        <View style={styles.fieldRow}>
+          <Text style={styles.fieldLabel}>发信邮箱</Text>
+          <TextInput
+            style={styles.input}
+            value={mailUser}
+            onChangeText={setMailUser}
+            onBlur={() => {
+              const v = mailUser.trim();
+              void updateSettings({ emailUser: v, emailProvider: v ? 'smtp' : 'none' });
+            }}
+            placeholder="you@qq.com"
+            placeholderTextColor={colors.textFaint}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
+          <Text style={styles.fieldHint}>
+            用你自己的邮箱发信，不需要任何服务器
+          </Text>
+        </View>
+
+        {/* 授权码 */}
+        <View style={styles.fieldRow}>
+          <Text style={styles.fieldLabel}>邮箱授权码</Text>
+          <TextInput
+            style={styles.input}
+            value={mailPass}
+            onChangeText={setMailPass}
+            onBlur={() => { void updateSettings({ emailPass: mailPass.trim() }); }}
+            placeholder="16 位授权码（不是 QQ 密码）"
+            placeholderTextColor={colors.textFaint}
+            autoCapitalize="none"
+            secureTextEntry
+          />
+          <Text style={styles.fieldHint}>
+            QQ 邮箱 → 设置 → 账号 → 开启 SMTP 服务，会得到授权码
+          </Text>
+        </View>
+
+        {/* 收件邮箱 */}
         <View style={styles.fieldRow}>
           <Text style={styles.fieldLabel}>收件邮箱</Text>
           <TextInput
@@ -375,82 +407,21 @@ export default function SettingsScreen() {
             value={emailTo}
             onChangeText={setEmailTo}
             onBlur={() => { void updateSettings({ emailTo: emailTo.trim() }); }}
-            placeholder="you@example.com"
+            placeholder="不填就发给自己"
             placeholderTextColor={colors.textFaint}
             autoCapitalize="none"
             keyboardType="email-address"
           />
         </View>
 
-        <View style={styles.fieldRow}>
-          <Text style={styles.fieldLabel}>发送通道</Text>
-          <Text style={styles.fieldHint}>
-            {s.emailProvider === 'none'
-              ? '先选一个，再看教程对应章节'
-              : PROVIDER_LABELS[s.emailProvider].hint}
-          </Text>
-        </View>
-        <View style={styles.chips}>
-          {(['brevo', 'resend', 'relay'] as const).map((p) => (
-            <Tap key={p} onPress={() => { void updateSettings({ emailProvider: p }); }}>
-              <View style={[styles.chip, s.emailProvider === p && styles.chipActive]}>
-                <Text style={[
-                  styles.chipText,
-                  s.emailProvider === p && styles.chipTextActive,
-                ]}>
-                  {p === 'brevo' ? 'Brevo' : p === 'resend' ? 'Resend' : '自建中转'}
-                </Text>
-              </View>
-            </Tap>
-          ))}
-        </View>
-
-        {s.emailProvider === 'relay' ? (
-          <View style={styles.fieldRow}>
-            <Text style={styles.fieldLabel}>中转接口地址</Text>
-            <TextInput
-              style={styles.input}
-              value={relayUrl}
-              onChangeText={setRelayUrl}
-              onBlur={() => { void updateSettings({ emailRelayUrl: relayUrl.trim() }); }}
-              placeholder="http://192.168.0.100:3000/"
-              placeholderTextColor={colors.textFaint}
-              autoCapitalize="none"
-            />
-            <Text style={styles.fieldHint}>仓库里附了现成脚本：tools/qq-mail-relay</Text>
-          </View>
-        ) : null}
-
-        {s.emailProvider === 'brevo' || s.emailProvider === 'resend' ? (
-          <View style={styles.fieldRow}>
-            <Text style={styles.fieldLabel}>API Key</Text>
-            <TextInput
-              style={styles.input}
-              value={apiKey}
-              onChangeText={setApiKey}
-              onBlur={() => { void updateSettings({ emailApiKey: apiKey.trim() }); }}
-              placeholder={s.emailProvider === 'resend' ? 're_xxxxxxxx' : 'xkeysib-xxxxxxxx'}
-              placeholderTextColor={colors.textFaint}
-              autoCapitalize="none"
-              secureTextEntry
-            />
-          </View>
-        ) : null}
-
-        {s.emailProvider === 'brevo' ? (
-          <View style={styles.fieldRow}>
-            <Text style={styles.fieldLabel}>发件人邮箱（需已验证）</Text>
-            <TextInput
-              style={styles.input}
-              value={fromEmail}
-              onChangeText={setFromEmail}
-              onBlur={() => { void updateSettings({ emailFrom: fromEmail.trim() }); }}
-              placeholder="you@example.com"
-              placeholderTextColor={colors.textFaint}
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
-            <Text style={styles.fieldHint}>要在 Brevo 后台把它验证为发件人，否则发不出去</Text>
+        {/* Expo Go 里发不了，这里明确说清楚免得用户白折腾 */}
+        {!mailCheck.ok && /Expo Go/.test(mailCheck.reason || '') ? (
+          <View style={styles.mailWarn}>
+            <Icon name="information-circle-outline" size={15} color={colors.warn} />
+            <Text style={styles.mailWarnText}>
+              发邮件需要 socket 能力，Expo Go 里没有。{'\n'}
+              配置会保存下来，装上正式版 App 后自动生效。
+            </Text>
           </View>
         ) : null}
 
@@ -465,6 +436,13 @@ export default function SettingsScreen() {
           <Text style={styles.mailResult}>{mailResultText}</Text>
         </View>
       </Glass>
+
+      <Row
+        icon="book-outline"
+        title="邮箱通知怎么配"
+        subtitle="授权码获取步骤、常见报错排查"
+        onPress={() => router.push('/help-email')}
+      />
 
       {/* ------------------------------------------------ 关于 */}
       <GroupTitle>关于</GroupTitle>
@@ -560,6 +538,12 @@ const styles = themedStyles(() => StyleSheet.create({
   },
 
   testWrap: { padding: spacing.lg, paddingTop: spacing.sm, gap: spacing.sm },
+  mailWarn: {
+    flexDirection: 'row', gap: 6, marginHorizontal: spacing.lg,
+    marginTop: spacing.md, padding: spacing.md,
+    backgroundColor: colors.warnDim, borderRadius: R.sm,
+  },
+  mailWarnText: { flex: 1, fontSize: 11.5, color: colors.warn, lineHeight: 17 },
   mailResult: { fontSize: 11.5, color: colors.textDim, lineHeight: 17 },
 
   footer: {

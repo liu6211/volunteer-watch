@@ -20,7 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import {
-  bgGradient, buttonShadow, colors, glassShadow, radius as R, spacing, useScheme,
+  bgGradient, buttonShadow, colors, getScheme, glassShadow, radius as R, spacing, useScheme,
 } from '../lib/theme';
 import { themedStyles } from '../lib/theme';
 
@@ -83,8 +83,13 @@ export function Glass({
     <View style={[{ borderRadius: corner, overflow: 'hidden' }, glassShadow(), style]}>
       <BlurView
         intensity={intensity}
-        // 深浅色各用一套系统材质（iOS）
-        tint={Platform.OS === 'ios' ? colors.blurTint : 'light'}
+        // iOS 用系统材质；其它平台（安卓/web）只认 light/dark 两档，
+        // 也必须跟着主题走，否则深色模式下玻璃会发白
+        tint={
+          Platform.OS === 'ios'
+            ? colors.blurTint
+            : (getScheme() === 'dark' ? 'dark' : 'light')
+        }
         blurMethod={android ? 'dimezisBlurViewSdk31Plus' : undefined}
         style={[
           StyleSheet.absoluteFill,

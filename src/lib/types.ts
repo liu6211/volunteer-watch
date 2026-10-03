@@ -61,8 +61,8 @@ export function makeWatchKey(host: string, id: string): string {
   return `${host}~${id}`;
 }
 
-/** 邮件发送通道 */
-export type EmailProvider = 'none' | 'relay' | 'resend' | 'brevo';
+/** 邮件发送方式：直接用邮箱账号发（SMTP） */
+export type EmailProvider = 'none' | 'smtp';
 
 /** 界面主题：跟随系统 / 强制浅色 / 强制深色 */
 export type ThemeMode = 'system' | 'light' | 'dark';
@@ -81,20 +81,22 @@ export interface AppSettings {
   /* ---------------------------------------------------- 邮箱通知 */
   /** 邮箱通知开关 */
   emailEnabled: boolean;
-  /** 收件邮箱 */
+  /** 收件邮箱（不填就发给自己） */
   emailTo: string;
-  /** 使用哪种发送通道 */
+  /** 发送方式。目前只有一种：用自己的邮箱账号直发 */
   emailProvider: EmailProvider;
   /**
-   * 中转接口地址（方案 relay）。
-   * 这个接口收到的 JSON 形如 { to, subject, text }，
-   * 由它负责真正发信（例如用 QQ 邮箱的 SMTP + 授权码）。
+   * 发信邮箱，例如 you@qq.com。
+   * 只有 QQ 邮箱需要用到，因为发信走 QQ 的 SMTP 服务器。
    */
-  emailRelayUrl: string;
-  /** 邮件服务商 API Key（resend / brevo） */
-  emailApiKey: string;
-  /** 发件人地址：brevo 必须是你在服务商后台验证过的邮箱 */
-  emailFrom: string;
+  emailUser: string;
+  /**
+   * 邮箱授权码（不是登录密码！QQ 邮箱在设置里生成）。
+   *
+   * 说明：它只能用来发信，不能登录你的邮箱账号，
+   * 存在 App 自己的私有存储里，其它 App 读不到。
+   */
+  emailPass: string;
   /** 是否把失败原因记到通知记录里，便于排查 */
   emailLogErrors: boolean;
 }
@@ -142,9 +144,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   emailEnabled: false,
   emailTo: '',
   emailProvider: 'none',
-  emailRelayUrl: '',
-  emailApiKey: '',
-  emailFrom: '',
+  emailUser: '',
+  emailPass: '',
   emailLogErrors: true,
 };
 
