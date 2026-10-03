@@ -17,15 +17,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchProject, joinProject } from '../../core/project.mjs';
 import type { OppDetail } from '../../core/project.mjs';
 import { fetchOppTab, OPP_TABS, postComment } from '../../core/account.mjs';
-
-const SITE_ORIGIN = 'https://gz.zhiyuanyun.com';
-/**
- * 站点会拦掉 App 发出的写请求（POST 被 WAF 拦，GET 服务器又不读参数），
- * 所以涉及「提交数据」的操作失败时，引导用户去浏览器完成 —— 那里是可靠的。
- */
-const SITE_HINT = '提示：志愿贵州会拦截 App 发出的提交请求。这类操作请点下面的按钮，在浏览器里完成（已登录状态可直接操作）。';import { useStore } from '../../lib/store';
+import { useStore } from '../../lib/store';
 import { colors, radius as R, spacing, themedStyles } from '../../lib/theme';
 import { Backdrop, Glass, GlassButton, Icon, Tap } from '../../components/ui';
+import { alertSiteFallback, openSite, SITE_PATHS } from '../../lib/siteFallback';
 
 export default function ProjectDetailScreen() {
   const { id, host } = useLocalSearchParams<{ id?: string; host?: string }>();
@@ -66,7 +61,11 @@ export default function ProjectDetailScreen() {
         sourceId: urlId,
         content: commentText,
       });
-      Alert.alert(r.ok ? '已发布' : '发布失败', r.message);
+      if (r.ok) {
+        Alert.alert('已发布', r.message);
+      } else {
+        alertSiteFallback('发布失败', r.message, SITE_PATHS.oppView(urlId));
+      }
       if (r.ok) {
         setCommentText('');
         await openExtra('comment');
@@ -180,17 +179,7 @@ export default function ProjectDetailScreen() {
                 Alert.alert('报名成功', r.message);
                 void load();
               } else {
-                /*
-                 * 站点会拦掉 App 发出的写请求（详见 README 里的说明），
-                 * 所以失败时给一条可靠的退路：直接在浏览器里操作。
-                 */
-                Alert.alert('报名未成功', `${r.message}\n\n${SITE_HINT}`, [
-                  { text: '知道了', style: 'cancel' },
-                  {
-                    text: '用浏览器打开',
-                    onPress: () => { void Linking.openURL(`${SITE_ORIGIN}/app/opp/view.php?id=${urlId}`); },
-                  },
-                ]);
+                alertSiteFallback('报名未成功', r.message, SITE_PATHS.oppView(urlId), '用浏览器报名');
               }
             } catch (e) {
               setResult((e as Error).message);
@@ -324,7 +313,7 @@ export default function ProjectDetailScreen() {
                       icon={joining === p.jobId ? undefined : full ? 'alert-circle-outline' : 'checkmark-circle-outline'}
                       loading={joining === p.jobId}
                       variant={full ? 'warn' : 'primary'}
-                      onPress={() => onJoin(p.jobId, p.title, full)}
+                      onPress={() => openSite(SITE_PATHS.oppView(urlId))}
                       style={{ marginTop: spacing.md }}
                     />
                     {full ? (
@@ -411,7 +400,7 @@ export default function ProjectDetailScreen() {
                   icon={commentBusy ? undefined : 'send-outline'}
                   loading={commentBusy}
                   variant="primary"
-                  onPress={() => { void onPostComment(); }}
+                  onPress={() => openSite(SITE_PATHS.oppView(urlId))}
                   style={{ marginTop: spacing.md }}
                 />
               </Glass>

@@ -17,6 +17,7 @@ import type { OrgSearchItem } from '../core/search.mjs';
 import { useStore } from '../lib/store';
 import { colors, radius as R, spacing, themedStyles } from '../lib/theme';
 import { Backdrop, Glass, GlassButton, Icon, Tap } from '../components/ui';
+import { alertSiteFallback, openSite, SITE_PATHS } from '../lib/siteFallback';
 
 /**
  * 固定只搜贵州站。
@@ -122,7 +123,11 @@ export default function SearchScreen() {
               if (r.ok || /已加入|已申请|已在|重复/.test(r.message)) {
                 setJoinedIds((prev) => (prev.includes(item.linkId) ? prev : [...prev, item.linkId]));
               }
-              Alert.alert(r.ok ? '已提交' : '没能加入', r.message);
+              if (r.ok) {
+                Alert.alert('已提交', r.message);
+              } else {
+                alertSiteFallback('没能加入', r.message, SITE_PATHS.orgView(item.linkId));
+              }
             } catch (e) {
               Alert.alert('出错', (e as Error).message);
             } finally {
@@ -159,7 +164,7 @@ export default function SearchScreen() {
                   <Text style={styles.joinedBtnText}>已加入</Text>
                 </View>
               ) : (
-                <Tap onPress={() => { void onJoinOrg(item); }} disabled={joiningId === item.linkId}>
+                <Tap onPress={() => openSite(SITE_PATHS.orgView(item.linkId))} disabled={joiningId === item.linkId}>
                   <View style={styles.joinBtn}>
                     {joiningId === item.linkId
                       ? <ActivityIndicator size="small" color={colors.primary} />

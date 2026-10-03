@@ -18,6 +18,7 @@ import { SEARCH_HOST } from '../core/search.mjs';
 import { useStore } from '../lib/store';
 import { colors, radius as R, spacing, themedStyles } from '../lib/theme';
 import { Backdrop, Glass, GlassButton, Icon, Tap, type IconName } from '../components/ui';
+import { alertSiteFallback, openSite, SITE_PATHS } from '../lib/siteFallback';
 
 type Panel =
   | { kind: '' }
@@ -143,7 +144,11 @@ export default function AccountScreen() {
             try {
               await autoLogin().catch(() => undefined);
               const r = await leaveOrg(accountSession(), SEARCH_HOST, item.orgId, status);
-              Alert.alert(r.ok ? '已处理' : '没成功', r.message);
+              if (r.ok) {
+                Alert.alert('已处理', r.message);
+              } else {
+                alertSiteFallback('没成功', r.message, SITE_PATHS.myOrgs);
+              }
               if (r.ok) await load('orgs');
             } catch (e) {
               Alert.alert('出错', (e as Error).message);
@@ -165,7 +170,11 @@ export default function AccountScreen() {
     try {
       await autoLogin().catch(() => undefined);
       const r = await fn();
-      Alert.alert(r.ok ? '成功' : '没成功', r.message);
+      if (r.ok) {
+        Alert.alert('成功', r.message);
+      } else {
+        alertSiteFallback('没成功', r.message, SITE_PATHS.myProjects);
+      }
       if (r.ok) {
         setPanel({ kind: '' });
         await load('projects');
@@ -218,7 +227,11 @@ export default function AccountScreen() {
             try {
               await autoLogin().catch(() => undefined);
               const r = await cancelApplication(accountSession(), SEARCH_HOST, item.oppId, status);
-              Alert.alert(r.ok ? '已取消' : '取消失败', r.message);
+              if (r.ok) {
+                Alert.alert('已取消', r.message);
+              } else {
+                alertSiteFallback('取消失败', r.message, SITE_PATHS.myProjects);
+              }
               if (r.ok) await load('projects');
             } catch (e) {
               Alert.alert('取消出错', (e as Error).message);
@@ -422,7 +435,7 @@ export default function AccountScreen() {
                 {/* ---- 可用操作（站点上有哪个就显示哪个）---- */}
                 <View style={styles.actRow}>
                   {it.actions?.some((a: { fn: string }) => a.fn === 'del_opp_vol') ? (
-                    <Tap onPress={() => onCancelApply(it)}>
+                    <Tap onPress={() => openSite(SITE_PATHS.myProjects)}>
                       <View style={styles.actBtnDanger}>
                         <Icon name="close-circle-outline" size={14} color={colors.danger} />
                         <Text style={styles.actBtnDangerText}>
@@ -433,7 +446,7 @@ export default function AccountScreen() {
                   ) : null}
 
                   {it.actions?.some((a: { fn: string }) => a.fn === 'change_group_div') ? (
-                    <Tap onPress={() => { void openJobPanel(it); }}>
+                    <Tap onPress={() => openSite(SITE_PATHS.myProjects)}>
                       <View style={styles.actBtn}>
                         <Icon name="swap-horizontal-outline" size={14} color={colors.primary} />
                         <Text style={styles.actBtnText}>更换岗位</Text>
@@ -443,13 +456,13 @@ export default function AccountScreen() {
 
                   {it.actions?.some((a: { fn: string }) => a.fn === 'show_apply_hour') ? (
                     <>
-                      <Tap onPress={() => setPanel({ kind: 'hour', oppId: it.oppId, name: it.name, hour: '', memo: '' })}>
+                      <Tap onPress={() => openSite(SITE_PATHS.myProjects)}>
                         <View style={styles.actBtn}>
                           <Icon name="time-outline" size={14} color={colors.primary} />
                           <Text style={styles.actBtnText}>申请时长</Text>
                         </View>
                       </Tap>
-                      <Tap onPress={() => setPanel({ kind: 'score', oppId: it.oppId, name: it.name, scoreId: '0', s1: 5, s2: 5, s3: 5, content: '' })}>
+                      <Tap onPress={() => openSite(SITE_PATHS.myProjects)}>
                         <View style={styles.actBtn}>
                           <Icon name="star-outline" size={14} color={colors.primary} />
                           <Text style={styles.actBtnText}>评价</Text>
@@ -593,7 +606,7 @@ export default function AccountScreen() {
                 {/* 脱离团体 / 删除加入申请（站点上 del_org_vol 出现时才显示） */}
                 {it.actions?.some((a: { fn: string }) => a.fn === 'del_org_vol') ? (
                   <View style={styles.actRow}>
-                    <Tap onPress={() => onLeaveOrg(it)}>
+                    <Tap onPress={() => openSite(SITE_PATHS.myOrgs)}>
                       <View style={styles.actBtnDanger}>
                         <Icon name="exit-outline" size={14} color={colors.danger} />
                         <Text style={styles.actBtnDangerText}>
