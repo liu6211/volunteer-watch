@@ -277,40 +277,47 @@ export default function TeamDetailScreen() {
               </Text>
               <Badge text={String(listData.length)} tone="neutral" />
             </View>
-
-            {/* 翻页：照站点自己的分页方式，每页 20 个 */}
-            <View style={styles.pager}>
-              <GlassButton
-                label="上一页" icon="chevron-back" variant="glass"
-                disabled={page <= 1 || paging}
-                onPress={() => { void loadPage(page - 1); }}
-                style={{ flex: 1 }}
-              />
-              <View style={styles.pageNo}>
-                <Text style={styles.pageNoText}>{page}</Text>
-              </View>
-              <GlassButton
-                label="下一页" icon="chevron-forward" variant="glass"
-                disabled={!hasNext || paging}
-                onPress={() => { void loadPage(page + 1); }}
-                style={{ flex: 1 }}
-              />
-            </View>
-
-            {paging ? (
-              <View style={styles.pagingRow}>
-                <ActivityIndicator size="small" color={colors.primary} />
-                <Text style={styles.pagingText}>正在读取第 {page + 1} 页…</Text>
-              </View>
-            ) : null}
-
-            {pageError ? (
-              <View style={styles.pagingRow}>
-                <Icon name="alert-circle" size={14} color={colors.danger} />
-                <Text style={styles.pageErrText}>{pageError}</Text>
-              </View>
-            ) : null}
           </View>
+        }
+        /* 翻页放在列表最下面（用户要求） */
+        ListFooterComponent={
+          listData.length > 0 ? (
+            <View>
+              {paging ? (
+                <View style={styles.pagingRow}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text style={styles.pagingText}>正在读取…</Text>
+                </View>
+              ) : null}
+
+              {pageError ? (
+                <View style={styles.pagingRow}>
+                  <Icon name="alert-circle" size={14} color={colors.danger} />
+                  <Text style={styles.pageErrText}>{pageError}</Text>
+                </View>
+              ) : null}
+
+              <View style={styles.pager}>
+                <GlassButton
+                  label="上一页" icon="chevron-back" variant="glass"
+                  disabled={page <= 1 || paging}
+                  onPress={() => { void loadPage(page - 1); }}
+                  style={{ flex: 1 }}
+                />
+                <View style={styles.pageNo}>
+                  <Text style={styles.pageNoText}>{page}</Text>
+                </View>
+                <GlassButton
+                  label="下一页" icon="chevron-forward" variant="glass"
+                  disabled={!hasNext || paging}
+                  onPress={() => { void loadPage(page + 1); }}
+                  style={{ flex: 1 }}
+                />
+              </View>
+
+              <Text style={styles.footNote}>每页 20 个，与站点一致</Text>
+            </View>
+          ) : null
         }
         ListEmptyComponent={
           <Glass corner={R.lg} style={styles.emptyCard}>
@@ -402,6 +409,11 @@ const styles = themedStyles(() => StyleSheet.create({
   },
   pagingText: { fontSize: 12, color: colors.textDim },
   pageErrText: { flex: 1, fontSize: 12, color: colors.danger },
+
+  footNote: {
+    fontSize: 11, color: colors.textFaint,
+    textAlign: 'center', marginTop: spacing.sm, marginBottom: spacing.lg,
+  },
 
   listTitleRow: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
