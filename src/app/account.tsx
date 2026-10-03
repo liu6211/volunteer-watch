@@ -262,9 +262,7 @@ export default function AccountScreen() {
                 </Glass>
               </Tap>
             ))}
-            <Text style={styles.moreHint}>
-              修改资料、修改密码等编辑功能没有做，需要的请到网站操作
-            </Text>
+
           </>
         ) : null}
 
@@ -275,7 +273,7 @@ export default function AccountScreen() {
           </View>
         ) : null}
 
-        {!loading && !expired && items.length === 0 ? (
+        {!loading && !expired && tab !== 'more' && items.length === 0 ? (
           <Glass corner={R.lg} style={styles.emptyCard}>
             <Icon name="file-tray-outline" size={26} color={colors.textFaint} />
             <Text style={styles.emptyTitle}>这里还是空的</Text>
@@ -337,6 +335,11 @@ export default function AccountScreen() {
             ) : null}
           </Glass>
         ))}
+
+        {/* 说明文字放最底下 */}
+        <Text style={styles.moreHint}>
+          修改资料、修改密码等编辑功能没有做，需要的请到网站操作
+        </Text>
       </ScrollView>
     </View>
   );

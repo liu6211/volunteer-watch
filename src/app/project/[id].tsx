@@ -76,6 +76,13 @@ export default function ProjectDetailScreen() {
             setJoining(jobId);
             setResult('');
             try {
+              /*
+               * 报名前【先主动重新登录一次】。
+               * 站点会话只有 30 分钟，等报错再补救已经晚一步；
+               * 有保存的凭据时先刷新会话，报名成功率会高很多。
+               */
+              await autoLogin().catch(() => undefined);
+
               let r = await joinProject(accountSession(), site, data?.oppId || '', jobId);
 
               /*

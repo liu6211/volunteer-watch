@@ -76,19 +76,18 @@ function GlassTabBar({ state, descriptors, navigation }: MinTabBarProps) {
   }, [state.index, pos]);
 
   return (
-    <View
-      style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}
-      pointerEvents="box-none"
-    >
-      {/*
-        标签栏这一层也必须有背景。
-        导航器容器自带一层浅色底（React Navigation 默认主题的 rgb(242,242,242)），
-        而各页面的渐变只画在页面内部，覆盖不到这里 ——
-        深色模式下标签栏周围就会发白。这里补一层渐变把它压掉。
-      */}
+    /*
+     * 外层铺满整屏宽度并垫上主题底色 —— 导航器自带的那层浅色底
+     * 会从左右两侧和底部露出来，必须完全盖住。
+     */
+    <View style={styles.wrap} pointerEvents="box-none">
       <Backdrop />
-      <Glass corner={R.pill} padded={false} intensity={62} style={styles.bar}>
-        <View style={styles.row} onLayout={(e) => setRowW(e.nativeEvent.layout.width)}>
+      <View
+        style={[styles.inner, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}
+        pointerEvents="box-none"
+      >
+        <Glass corner={R.pill} padded={false} intensity={62} style={styles.bar}>
+          <View style={styles.row} onLayout={(e) => setRowW(e.nativeEvent.layout.width)}>
           {/* 滑动镜头：垫在图标下面 */}
           {itemW > 0 ? (
             <Animated.View
@@ -154,8 +153,9 @@ function GlassTabBar({ state, descriptors, navigation }: MinTabBarProps) {
               </Tap>
             );
           })}
-        </View>
-      </Glass>
+          </View>
+        </Glass>
+      </View>
     </View>
   );
 }
@@ -182,12 +182,19 @@ export default function TabsLayout() {
 }
 
 const styles = themedStyles(() => StyleSheet.create({
+  /**
+   * 最外层：底色要【铺满整屏宽度】，一点缝都不留，
+   * 否则导航器自带的浅色底会从左右两侧和底部露出来。
+   */
   wrap: {
+    width: '100%',
+    backgroundColor: colors.bg,
+  },
+  /** 内层才留左右边距，让胶囊与屏幕边缘有空隙 */
+  inner: {
+    width: '100%',
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
-    // 垫一层主题底色：万一渐变没铺到这里（安全区、圆角外），
-    // 也不会露出导航器自带的那层浅色底
-    backgroundColor: colors.bg,
   },
   bar: { width: '100%' },
   row: {
