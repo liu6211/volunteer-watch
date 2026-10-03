@@ -223,6 +223,15 @@ export default function SearchScreen() {
             </Glass>
           ) : null
         }
+        ListFooterComponent={
+          /* 兜底：万一这里搜不到（比如团体没被收录），还能手动贴链接，不至于卡死 */
+          <Tap onPress={() => router.push('/add')}>
+            <View style={styles.fallback}>
+              <Icon name="link-outline" size={14} color={colors.textFaint} />
+              <Text style={styles.fallbackText}>搜不到？手动输入团体链接</Text>
+            </View>
+          </Tap>
+        }
       />
     </View>
   );
@@ -302,4 +311,10 @@ const styles = themedStyles(() => StyleSheet.create({
   emptyCard: { alignItems: 'center', marginTop: spacing.xl, gap: spacing.sm },
   emptyTitle: { fontSize: 15, fontWeight: '800', color: colors.text },
   emptyText: { fontSize: 12, color: colors.textDim, textAlign: 'center', lineHeight: 18 },
+
+  fallback: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 5, paddingVertical: spacing.xl,
+  },
+  fallbackText: { fontSize: 11.5, color: colors.textFaint },
 }));

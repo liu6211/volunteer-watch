@@ -92,11 +92,11 @@ function ThemedApp() {
           />
           <Stack.Screen
             name="add"
-            options={{ headerShown: true, title: '添加团体' }}
+            options={{ headerShown: true, title: '手动输入链接' }}
           />
           <Stack.Screen
             name="search"
-            options={{ headerShown: true, title: '搜索团体' }}
+            options={{ headerShown: true, title: '添加团体' }}
           />
           <Stack.Screen
             name="login"
