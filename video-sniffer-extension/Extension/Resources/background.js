@@ -146,7 +146,7 @@ function snapshot(tabId) {
   const arr = [];
   bucket(tabId).forEach((it) => {
     arr.push({
-      url: it.url, kind: it.kind, name: it.name, t: it.t,
+      url: it.url, kind: it.kind, cat: it.cat || 'video', ext: it.ext, name: it.name, t: it.t,
       duration: it.duration || 0, size: it.size || 0, sizeMode: it.sizeMode || null,
       segments: it.segments || 0, encrypted: !!it.encrypted, error: it.error || null,
       probing: !!it.probing, width: it.width || 0, height: it.height || 0
@@ -156,31 +156,57 @@ function snapshot(tabId) {
   return arr;
 }
 
-function pushToTab(tabId) {
+// 推送合并：新资源立刻推（列表马上出现），进度更新 250ms 合并一次，
+// 否则几十个资源同时探测会把页面脚本刷爆
+const pushTimers = new Map();
+
+function sendSnapshot(tabId) {
   try {
     api.tabs.sendMessage(tabId, { type: 'vsd-update', items: snapshot(tabId) }, () => {
-      // 页面可能还没注入 content script，忽略错误
       void api.runtime.lastError;
     });
   } catch (e) {}
 }
 
-const VIDEO_EXT = { mp4: 1, m4v: 1, mov: 1, webm: 1, mkv: 1, flv: 1, avi: 1, '3gp': 1, m2ts: 1, mts: 1 };
-const AUDIO_EXT = { mp3: 1, m4a: 1, aac: 1, flac: 1, wav: 1, ogg: 1, opus: 1 };
+function pushToTab(tabId, immediate) {
+  if (pushTimers.has(tabId)) {
+    if (!immediate) return;
+    clearTimeout(pushTimers.get(tabId));
+    pushTimers.delete(tabId);
+  }
+  if (immediate) { sendSnapshot(tabId); return; }
+  pushTimers.set(tabId, setTimeout(() => {
+    pushTimers.delete(tabId);
+    sendSnapshot(tabId);
+  }, 250));
+}
+
+/* 只收三类资源：视频 / 图片 / 音频（m3u8 归到视频）。
+ * 网页自身的东西（html/js/css/字体）以及文档压缩包一律不要。 */
+const CAT_EXT = {
+  video: ['mp4', 'm4v', 'mov', 'webm', 'mkv', 'flv', 'f4v', 'avi', 'wmv', '3gp', '3g2', 'ogv', 'mpg', 'mpeg', 'rmvb', 'm2ts', 'mts', 'ts', 'm4s'],
+  image: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic', 'heif', 'avif', 'svg', 'ico', 'tif', 'tiff'],
+  audio: ['mp3', 'm4a', 'aac', 'flac', 'wav', 'ogg', 'oga', 'opus', 'wma', 'ape']
+};
+
+const EXT_KIND = {};
+Object.keys(CAT_EXT).forEach(function (k) {
+  CAT_EXT[k].forEach(function (e) { EXT_KIND[e] = k; });
+});
 
 function classify(url) {
   let ext = '';
-  try { const m = /\.([a-z0-9]{2,5})$/.exec(new URL(url).pathname.toLowerCase()); if (m) ext = m[1]; } catch (e) {}
-  if (ext === 'm3u8') return { kind: 'hls', ext };
-  if (ext === 'mpd') return { kind: 'dash', ext };
-  if (VIDEO_EXT[ext]) return { kind: 'video', ext };
-  if (AUDIO_EXT[ext]) return { kind: 'audio', ext };
-  const m2 = /\.(m3u8|mp4|m4v|webm|mov|flv|mkv|mp3|m4a|aac)(?:[^a-z0-9]|$)/i.exec(url);
-  if (m2) {
-    const e2 = m2[1].toLowerCase();
-    return { kind: e2 === 'm3u8' ? 'hls' : (VIDEO_EXT[e2] ? 'video' : 'audio'), ext: e2 };
-  }
-  return null;
+  try {
+    const m = /\.([a-z0-9]{1,6})$/.exec(new URL(url).pathname.toLowerCase());
+    if (m) ext = m[1];
+  } catch (e) {}
+  if (!ext) return null;                       // 无扩展名的只认 DOM 里的 <video>/<audio>
+
+  if (ext === 'm3u8' || ext === 'mpd') return { kind: 'hls', cat: 'video', ext: ext };
+
+  const cat = EXT_KIND[ext];
+  if (cat) return { kind: cat, cat: cat, ext: ext };
+  return null;                                 // 其它一律忽略
 }
 
 const GENERIC = /^(index|playlist|master|hls|media|video|vod|out|stream|manifest|chunk|file|main|v|\d+)$/i;
@@ -204,7 +230,7 @@ function onFound(tabId, raw, meta) {
   if (!it) {
     if (map.size >= MAX_ITEMS) return;
     it = {
-      url: abs, kind: cls.kind, ext: cls.ext,
+      url: abs, kind: cls.kind, cat: cls.cat, ext: cls.ext,
       name: (meta && meta.name) || autoName(abs),
       t: Date.now(), duration: 0, size: 0, sizeMode: null,
       probing: false, probed: false
@@ -215,7 +241,7 @@ function onFound(tabId, raw, meta) {
     if (meta && meta.name && it.name.indexOf('media-') === 0) it.name = meta.name;
     if (meta && meta.duration > 0 && !it.duration) it.duration = meta.duration;
   }
-  pushToTab(tabId);
+  pushToTab(tabId, true);   // 新资源立刻出现在列表里
 }
 
 /* ============================ 探测（跨域） ============================ */
@@ -236,17 +262,17 @@ async function probe(tabId, it) {
 
   // 时长 / 分辨率只有解码器知道，让页面用隐藏的 <video> 读一次元数据。
   // 媒体元素的加载不受 CORS 限制，所以这一步连跨域 mp4 和 HLS 都能拿到。
-  if (it.kind !== 'dash' && (!it.duration || !it.height)) requestMediaMeta(tabId, it.url);
+  // 只对音视频做——给每张图片、每个 zip 都建 video 元素会把页面拖死。
+  if (MEDIA_KINDS[it.kind] && (!it.duration || !it.height)) requestMediaMeta(tabId, it.url);
 }
 
+const MEDIA_KINDS = { video: 1, audio: 1, hls: 1 };
+
 function requestMediaMeta(tabId, url) {
-  const ask = () => {
-    try {
-      api.tabs.sendMessage(tabId, { type: 'vsd-probe-media', url: url }, () => { void api.runtime.lastError; });
-    } catch (e) {}
-  };
-  ask();
-  setTimeout(ask, 2500);   // 页面脚本可能还没就绪，补一次
+  // 只问一次；页面侧会自己处理「还没就绪」和去重
+  try {
+    api.tabs.sendMessage(tabId, { type: 'vsd-probe-media', url: url }, () => { void api.runtime.lastError; });
+  } catch (e) {}
 }
 
 async function probeSize(it) {

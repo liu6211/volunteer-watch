@@ -43,6 +43,12 @@ final class DownloadManager: NSObject, ObservableObject {
 
     private var bgSession: URLSession!
     private var hlsSession: AVAssetDownloadURLSession!
+    /// 后台会话写临时文件失败时（锁屏/切后台最容易触发），用它兜底重下
+    private var fgSession: URLSession!
+
+    /// 已经走过一次兜底的，不要无限重试
+    private var usedFallback = Set<UUID>()
+    private var bgAssertions: [UUID: UIBackgroundTaskIdentifier] = [:]
 
     var backgroundCompletionHandler: (() -> Void)?
 
@@ -68,6 +74,12 @@ final class DownloadManager: NSObject, ObservableObject {
         hlsConfig.sessionSendsLaunchEvents = true
         hlsConfig.allowsCellularAccess = !settings.wifiOnly
         hlsSession = AVAssetDownloadURLSession(configuration: hlsConfig, assetDownloadDelegate: self, delegateQueue: .main)
+
+        // 前台会话：默认配置，写的是 App 自己的临时目录，不受 nsurlsessiond 限制
+        let fgConfig = URLSessionConfiguration.default
+        fgConfig.allowsCellularAccess = !settings.wifiOnly
+        fgConfig.timeoutIntervalForResource = 60 * 60 * 12
+        fgSession = URLSession(configuration: fgConfig, delegate: self, delegateQueue: .main)
     }
 
     // MARK: - 持久化
@@ -135,7 +147,8 @@ final class DownloadManager: NSObject, ObservableObject {
 
     // MARK: - 添加任务
 
-    func addDownload(urlString: String, name: String? = nil, group: String? = nil, pageURL: String? = nil) {
+    func addDownload(urlString: String, name: String? = nil, group: String? = nil,
+                     pageURL: String? = nil, kind: String? = nil) {
         let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: trimmed),
               let scheme = url.scheme?.lowercased(),
@@ -153,6 +166,7 @@ final class DownloadManager: NSObject, ObservableObject {
         it.isHLS = isHLS
         it.group = group ?? groups.first ?? "默认分组"
         if let p = pageURL, !p.isEmpty { it.pageURL = p }
+        if let k = kind, !k.isEmpty { it.kind = k }
 
         let baseName = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let fromURLCandidates = [
@@ -214,24 +228,51 @@ final class DownloadManager: NSObject, ObservableObject {
     }
 
     private func start(_ it: DownloadItem) {
-        if it.isHLS { startHLS(it) } else { startProgressive(it) }
+        if it.isHLS { startHLS(it) } else { startProgressive(it, useForeground: false) }
     }
 
-    private func startProgressive(_ it: DownloadItem) {
+    private func startProgressive(_ it: DownloadItem, useForeground: Bool) {
         guard let url = URL(string: it.url) else { return }
+        let session: URLSession = useForeground ? fgSession : bgSession
 
-        // 有断点数据就续传
+        // 有断点数据就续传。注意：失败重试时不复用，避免坏数据反复失败。
         let resumeFile = mediaDir.appendingPathComponent("resume-\(it.id.uuidString).dat")
         let task: URLSessionDownloadTask
-        if let data = try? Data(contentsOf: resumeFile), !data.isEmpty {
-            task = bgSession.downloadTask(withResumeData: data)
+        if !useForeground, usedFallback.contains(it.id) == false,
+           let data = try? Data(contentsOf: resumeFile), !data.isEmpty {
+            task = session.downloadTask(withResumeData: data)
             try? fm.removeItem(at: resumeFile)
         } else {
-            task = bgSession.downloadTask(with: url)
+            task = session.downloadTask(with: url)
         }
         task.taskDescription = it.id.uuidString
+        if useForeground { beginBGAssertion(it.id) }
         update(it.id) { $0.state = .downloading; $0.error = nil }
         task.resume()
+    }
+
+    /// 后台会话写临时文件失败（锁屏 / 切后台最容易触发）时的兜底：
+    /// 改用前台会话重下，同时申请一段后台执行时间，避免一切换就走不动。
+    private func startFallback(_ id: UUID) {
+        guard let it = item(id), !it.isHLS else { return }
+        usedFallback.insert(id)
+        startProgressive(it, useForeground: true)
+        say("后台通道失败，已改用前台通道重试")
+    }
+
+    private func beginBGAssertion(_ id: UUID) {
+        guard bgAssertions[id] == nil else { return }
+        var t: UIBackgroundTaskIdentifier = .invalid
+        t = UIApplication.shared.beginBackgroundTask(withName: "vsd-\(id.uuidString)") { [weak self] in
+            self?.endBGAssertion(id)
+        }
+        if t != .invalid { bgAssertions[id] = t }
+    }
+
+    private func endBGAssertion(_ id: UUID) {
+        if let t = bgAssertions.removeValue(forKey: id), t != .invalid {
+            UIApplication.shared.endBackgroundTask(t)
+        }
     }
 
     private func startHLS(_ it: DownloadItem) {
@@ -310,8 +351,12 @@ final class DownloadManager: NSObject, ObservableObject {
     }
 
     func cancel(_ id: UUID) {
+        endBGAssertion(id)
         let idStr = id.uuidString
         bgSession.getAllTasks { tasks in
+            tasks.first { $0.taskDescription == idStr }?.cancel()
+        }
+        fgSession.getAllTasks { tasks in
             tasks.first { $0.taskDescription == idStr }?.cancel()
         }
         hlsSession.getAllTasks { tasks in
@@ -375,6 +420,7 @@ final class DownloadManager: NSObject, ObservableObject {
     }
 
     private func finishFile(id: UUID, url: URL) {
+        endBGAssertion(id)
         let attrs = try? fm.attributesOfItem(atPath: url.path)
         let size = (attrs?[.size] as? Int64) ?? 0
         update(id) {
@@ -445,9 +491,9 @@ final class DownloadManager: NSObject, ObservableObject {
     // MARK: - 相册
 
     func saveToPhotos(_ ids: [UUID], silent: Bool = false) {
-        let files = ids.compactMap { id -> (UUID, URL)? in
+        let files = ids.compactMap { id -> (UUID, URL, String)? in
             guard let it = item(id), let p = it.localPath else { return nil }
-            return (id, URL(fileURLWithPath: p))
+            return (id, URL(fileURLWithPath: p), it.kind)
         }
         guard !files.isEmpty else {
             if !silent { say("没有可导出的文件") }
@@ -463,12 +509,14 @@ final class DownloadManager: NSObject, ObservableObject {
                 }
                 var remaining = files.count
                 var failed = 0
-                for (id, url) in files {
+                for (id, url, kind) in files {
+                    // 图片必须按 .photo 存，按 .video 存会失败
+                    let resourceType: PHAssetResourceType = (kind == "image") ? .photo : .video
                     PHPhotoLibrary.shared().performChanges {
                         let req = PHAssetCreationRequest.forAsset()
                         let opts = PHAssetResourceCreationOptions()
                         opts.originalFilename = url.lastPathComponent
-                        req.addResource(with: .video, fileURL: url, options: opts)
+                        req.addResource(with: resourceType, fileURL: url, options: opts)
                     } completionHandler: { ok, _ in
                         DispatchQueue.main.async {
                             if ok { self.update(id) { $0.savedToPhotos = true } } else { failed += 1 }
@@ -494,7 +542,8 @@ final class DownloadManager: NSObject, ObservableObject {
         guard let raw = q.first(where: { $0.name == "url" })?.value, !raw.isEmpty else { return }
         let name = q.first(where: { $0.name == "name" })?.value
         let page = q.first(where: { $0.name == "page" })?.value
-        addDownload(urlString: raw, name: name, pageURL: page)
+        let kind = q.first(where: { $0.name == "kind" })?.value
+        addDownload(urlString: raw, name: name, pageURL: page, kind: kind)
         say("已加入下载队列")
     }
 
@@ -580,13 +629,25 @@ extension DownloadManager {
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         guard let error, let idStr = task.taskDescription, let id = UUID(uuidString: idStr) else { return }
 
-        // 暂停产生的取消不算失败
         let ns = error as NSError
         if ns.code == NSURLErrorCancelled { return }
 
+        // 后台会话在锁屏 / 切后台时写不了临时文件，会报「无法创建文件」这类错误。
+        // 不要直接判失败——自动降级到前台会话重下一次。
+        let fileErrors = [-3000, -3001, -3002, -3003, -3004, -3005, -3006, -3007]
+        if ns.domain == NSURLErrorDomain,
+           fileErrors.contains(ns.code),
+           session === bgSession,
+           !usedFallback.contains(id) {
+            update(id) { $0.error = nil }
+            startFallback(id)
+            return
+        }
+
+        endBGAssertion(id)
         update(id) {
             $0.state = .failed
-            $0.error = error.localizedDescription
+            $0.error = "\(error.localizedDescription)  [\(ns.domain) \(ns.code)]"
         }
         pump()
     }

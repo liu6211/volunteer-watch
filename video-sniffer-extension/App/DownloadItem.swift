@@ -49,6 +49,9 @@ struct DownloadItem: Identifiable, Codable, Equatable {
     /// 这个视频是在哪个网页上找到的（扩展传过来，长按菜单里用）
     var pageURL: String?
 
+    /// 资源类型：video / image / audio —— 决定导出到相册时用哪种资源
+    var kind: String = "video"
+
     /// 0...1，总大小未知时返回 0
     var progress: Double {
         if isHLS && totalBytes == 0 { return min(1, max(0, hlsProgress)) }

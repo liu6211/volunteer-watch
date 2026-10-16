@@ -15,6 +15,7 @@ struct ContentView: View {
     @State private var selection = Set<UUID>()
     @State private var editMode: EditMode = .inactive
     @State private var filter = "全部"
+    @State private var catFilter = "all"
     @State private var showNewTask = false
     @State private var showSettings = false
     @State private var showNewGroup = false
@@ -24,8 +25,10 @@ struct ContentView: View {
     @State private var previewItem: DownloadItem?
 
     private var visibleItems: [DownloadItem] {
-        if filter == "全部" { return dm.items }
-        return dm.items.filter { $0.group == filter }
+        var arr = dm.items
+        if filter != "全部" { arr = arr.filter { $0.group == filter } }
+        if catFilter != "all" { arr = arr.filter { $0.kind == catFilter } }
+        return arr
     }
 
     var body: some View {
@@ -121,11 +124,42 @@ struct ContentView: View {
                         .font(.subheadline.weight(.semibold))
                     }
                     Spacer()
+                    Menu {
+                        Button("全部类型") { catFilter = "all" }
+                        Button("视频") { catFilter = "video" }
+                        Button("图片") { catFilter = "image" }
+                        Button("音频") { catFilter = "audio" }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: iconForCat)
+                                .font(.caption2)
+                            Text(labelForCat)
+                        }
+                        .font(.subheadline.weight(.semibold))
+                    }
                 }
             }
         }
         .listStyle(.insetGrouped)
         .refreshable { dm.restoreTasks() }
+    }
+
+    private var labelForCat: String {
+        switch catFilter {
+        case "video": return "视频"
+        case "image": return "图片"
+        case "audio": return "音频"
+        default: return "全部类型"
+        }
+    }
+
+    private var iconForCat: String {
+        switch catFilter {
+        case "video": return "film"
+        case "image": return "photo"
+        case "audio": return "music.note"
+        default: return "chevron.down"
+        }
     }
 
     private var emptyState: some View {
