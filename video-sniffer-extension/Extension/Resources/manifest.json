@@ -1,0 +1,28 @@
+{
+  "manifest_version": 2,
+  "name": "视频嗅探",
+  "version": "1.0.0",
+  "description": "嗅探网页里的视频地址，跨域读取时长与大小，一键复制直链。",
+  "permissions": [
+    "storage",
+    "tabs",
+    "activeTab",
+    "<all_urls>"
+  ],
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": false
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "all_frames": true,
+      "run_at": "document_start"
+    }
+  ],
+  "browser_action": {
+    "default_title": "视频嗅探",
+    "default_popup": "popup.html"
+  }
+}
