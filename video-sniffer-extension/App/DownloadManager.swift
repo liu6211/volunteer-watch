@@ -135,7 +135,7 @@ final class DownloadManager: NSObject, ObservableObject {
 
     // MARK: - 添加任务
 
-    func addDownload(urlString: String, name: String? = nil, group: String? = nil) {
+    func addDownload(urlString: String, name: String? = nil, group: String? = nil, pageURL: String? = nil) {
         let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let url = URL(string: trimmed),
               let scheme = url.scheme?.lowercased(),
@@ -152,6 +152,7 @@ final class DownloadManager: NSObject, ObservableObject {
         var it = DownloadItem(url: trimmed, name: "")
         it.isHLS = isHLS
         it.group = group ?? groups.first ?? "默认分组"
+        if let p = pageURL, !p.isEmpty { it.pageURL = p }
 
         let baseName = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let fromURLCandidates = [
@@ -492,7 +493,8 @@ final class DownloadManager: NSObject, ObservableObject {
         let q = comps?.queryItems ?? []
         guard let raw = q.first(where: { $0.name == "url" })?.value, !raw.isEmpty else { return }
         let name = q.first(where: { $0.name == "name" })?.value
-        addDownload(urlString: raw, name: name)
+        let page = q.first(where: { $0.name == "page" })?.value
+        addDownload(urlString: raw, name: name, pageURL: page)
         say("已加入下载队列")
     }
 

@@ -354,7 +354,9 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
   /* ---------------- 唤起 App 下载 ---------------- */
 
   function openInApp(it) {
-    const q = 'url=' + encodeURIComponent(it.url) + '&name=' + encodeURIComponent(it.name || '');
+    const q = 'url=' + encodeURIComponent(it.url)
+      + '&name=' + encodeURIComponent(it.name || '')
+      + '&page=' + encodeURIComponent(location.href);
     const link = 'videosniffer://add?' + q;
     if (link.length > 7000) { toast('地址太长，请用「复制链接」'); return; }
     try {

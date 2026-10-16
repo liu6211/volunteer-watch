@@ -5,6 +5,7 @@
 
 import SwiftUI
 import AVKit
+import UIKit
 
 // MARK: - 主界面
 
@@ -311,6 +312,71 @@ struct TaskRow: View {
         .contentShape(Rectangle())
         .onTapGesture {
             if item.state == .done, item.localPath != nil { onPreview() }
+        }
+        .contextMenu { longPressMenu }
+    }
+
+    /// 长按任务弹出的菜单，和常见下载器保持一致
+    @ViewBuilder
+    private var longPressMenu: some View {
+        Menu {
+            ForEach(dm.groups, id: \.self) { g in
+                Button {
+                    dm.move([item.id], to: g)
+                } label: {
+                    if g == item.group {
+                        Label(g, systemImage: "checkmark")
+                    } else {
+                        Text(g)
+                    }
+                }
+            }
+        } label: {
+            Label("移动到分组", systemImage: "folder")
+        }
+
+        if let p = item.pageURL, let u = URL(string: p) {
+            Button {
+                UIApplication.shared.open(u)
+            } label: {
+                Label("打开网页地址", systemImage: "safari")
+            }
+
+            Button {
+                UIPasteboard.general.string = p
+                dm.toast = "已复制网页链接"
+            } label: {
+                Label("复制网页链接", systemImage: "doc.on.doc")
+            }
+        }
+
+        Button {
+            UIPasteboard.general.string = item.url
+            dm.toast = "已复制视频链接"
+        } label: {
+            Label("复制视频链接", systemImage: "link")
+        }
+
+        if item.state == .done {
+            Button {
+                dm.saveToPhotos([item.id])
+            } label: {
+                Label("导出到相册", systemImage: "square.and.arrow.down")
+            }
+        }
+
+        if item.state == .paused || item.state == .failed {
+            Button {
+                dm.resume(item.id)
+            } label: {
+                Label("继续下载", systemImage: "play.fill")
+            }
+        }
+
+        Button(role: .destructive) {
+            dm.delete([item.id])
+        } label: {
+            Label("删除", systemImage: "trash")
         }
     }
 

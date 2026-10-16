@@ -46,6 +46,9 @@ struct DownloadItem: Identifiable, Codable, Equatable {
     /// 归属分组，对应界面上的「移动」
     var group: String = "默认分组"
 
+    /// 这个视频是在哪个网页上找到的（扩展传过来，长按菜单里用）
+    var pageURL: String?
+
     /// 0...1，总大小未知时返回 0
     var progress: Double {
         if isHLS && totalBytes == 0 { return min(1, max(0, hlsProgress)) }
