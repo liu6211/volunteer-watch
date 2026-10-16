@@ -10,11 +10,17 @@ import Foundation
 import AVFoundation
 import Photos
 import UIKit
+import Network
 
 struct AppSettings: Codable, Equatable {
-    var autoSaveToPhotos = false      // 下载完成自动存相册
-    var wifiOnly = true               // 仅 Wi-Fi 下载
-    var maxConcurrent = 2             // 同时下载数
+    var autoSaveToPhotos = false
+    /// 默认允许蜂窝网络。
+    /// 之前默认 true，并把它映射成 URLSession 的 allowsCellularAccess=false，
+    /// 结果在蜂窝网络下直接报 -1009「已断开与互联网的连接」，用户以为是没权限。
+    var wifiOnly = false
+    var maxConcurrent = 2
+    /// 用于迁移老版本里被误设成 true 的 wifiOnly
+    var settingsVersion: Int?
 }
 
 /// 环境自检结果：万一还是下不来，靠这个定位是「容器不可写」还是「网络被拒」
@@ -61,6 +67,9 @@ final class DownloadManager: NSObject, ObservableObject {
     /// 流式下载（不经过系统临时文件）的任务句柄
     private var streamTasks: [UUID: Task<Void, Never>] = [:]
 
+    private let pathMonitor = NWPathMonitor()
+    private var isCellular = false
+
     var backgroundCompletionHandler: (() -> Void)?
 
     // MARK: - 初始化
@@ -77,20 +86,33 @@ final class DownloadManager: NSObject, ObservableObject {
         let bgConfig = URLSessionConfiguration.background(withIdentifier: bgID)
         bgConfig.isDiscretionary = false
         bgConfig.sessionSendsLaunchEvents = true
-        bgConfig.allowsCellularAccess = !settings.wifiOnly
+        bgConfig.allowsCellularAccess = true      // 永远允许；仅 Wi-Fi 由代码在启动任务前判断
         bgSession = URLSession(configuration: bgConfig, delegate: self, delegateQueue: .main)
 
         let hlsConfig = URLSessionConfiguration.background(withIdentifier: hlsID)
         hlsConfig.isDiscretionary = false
         hlsConfig.sessionSendsLaunchEvents = true
-        hlsConfig.allowsCellularAccess = !settings.wifiOnly
+        hlsConfig.allowsCellularAccess = true
         hlsSession = AVAssetDownloadURLSession(configuration: hlsConfig, assetDownloadDelegate: self, delegateQueue: .main)
 
-        // 前台会话：默认配置，写的是 App 自己的临时目录，不受 nsurlsessiond 限制
+        // 前台会话：默认配置，写的是 App 自己的目录，不受 nsurlsessiond 限制
         let fgConfig = URLSessionConfiguration.default
-        fgConfig.allowsCellularAccess = !settings.wifiOnly
+        fgConfig.allowsCellularAccess = true
         fgConfig.timeoutIntervalForResource = 60 * 60 * 12
         fgSession = URLSession(configuration: fgConfig, delegate: self, delegateQueue: .main)
+
+        // 监听网络类型，让「仅 Wi-Fi」开关能立刻生效
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            let cellular = path.usesInterfaceType(.cellular)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if self.isCellular != cellular {
+                    self.isCellular = cellular
+                    self.pump()
+                }
+            }
+        }
+        pathMonitor.start(queue: DispatchQueue(label: "com.vsd.pathmonitor"))
     }
 
     // MARK: - 持久化
@@ -101,10 +123,17 @@ final class DownloadManager: NSObject, ObservableObject {
         items = s.items
         groups = s.groups.isEmpty ? ["默认分组"] : s.groups
         settings = s.settings
+        // 老版本默认「仅 Wi-Fi」并且在会话层禁用了蜂窝，
+        // 结果在蜂窝网络下直接 -1009。这里强制迁回允许蜂窝。
+        if (settings.settingsVersion ?? 0) < 1 {
+            settings.wifiOnly = false
+            settings.settingsVersion = 1
+        }
         // 上次退出时还在下载的都标成已暂停，等用户点继续
         for i in items.indices where items[i].isActive {
             items[i].state = .paused
         }
+        save()
     }
 
     private func save() {
@@ -231,6 +260,19 @@ final class DownloadManager: NSObject, ObservableObject {
 
     /// 控制并发：把 queued 的任务按顺序放出去
     func pump() {
+        // 「仅 Wi-Fi」在代码里判断，而不是靠 URLSession 的 allowsCellularAccess
+        // （那个在会话创建后就改不动了，会出现开关失灵 / 蜂窝下直接 -1009）
+        if settings.wifiOnly && isCellular {
+            var changed = false
+            for i in items.indices where items[i].state == .queued {
+                items[i].state = .paused
+                items[i].error = "仅 Wi-Fi 模式：当前是蜂窝网络，已暂停"
+                changed = true
+            }
+            if changed { save() }
+            return
+        }
+
         let active = items.filter { $0.state == .downloading }.count
         let room = max(0, settings.maxConcurrent - active)
         guard room > 0 else { return }
@@ -648,10 +690,7 @@ final class DownloadManager: NSObject, ObservableObject {
 
     func settingsChanged() {
         save()
-        let cellular = !settings.wifiOnly
-        bgSession.configuration.allowsCellularAccess = cellular
-        hlsSession.configuration.allowsCellularAccess = cellular
-        fgSession.configuration.allowsCellularAccess = cellular
+        // allowsCellularAccess 在会话创建后改不动，所以「仅 Wi-Fi」交给 pump() 判断
         pump()
     }
 

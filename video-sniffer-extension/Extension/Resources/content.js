@@ -13,15 +13,13 @@
   const api = typeof browser !== 'undefined' ? browser : chrome;
   const IS_TOP = (() => { try { return window.top === window.self; } catch (e) { return false; } })();
 
+  // 只认视频。分片(.ts/.m4s)不报——播放 HLS 时 Safari 必然加载过 m3u8，
+  // 报分片只会让列表被几百条噪音塞满。
   const EXT_CAT = {
     mp4: 'video', m4v: 'video', mov: 'video', webm: 'video', mkv: 'video', flv: 'video',
     f4v: 'video', avi: 'video', wmv: 'video', '3gp': 'video', '3g2': 'video', ogv: 'video',
-    mpg: 'video', mpeg: 'video', rmvb: 'video', m2ts: 'video', mts: 'video', ts: 'video', m4s: 'video',
-    m3u8: 'video', mpd: 'video',
-    jpg: 'image', jpeg: 'image', png: 'image', gif: 'image', webp: 'image', bmp: 'image',
-    heic: 'image', heif: 'image', avif: 'image', svg: 'image', ico: 'image', tif: 'image', tiff: 'image',
-    mp3: 'audio', m4a: 'audio', aac: 'audio', flac: 'audio', wav: 'audio',
-    ogg: 'audio', oga: 'audio', opus: 'audio', wma: 'audio', ape: 'audio'
+    mpg: 'video', mpeg: 'video', rmvb: 'video', m2ts: 'video', mts: 'video',
+    m3u8: 'video', mpd: 'video'
   };
 
   const seen = new Set();
@@ -183,17 +181,19 @@
   function scanMedia(root) {
     try {
       const scope = root && root.querySelectorAll ? root : document;
-      const nodes = scope.querySelectorAll('video,audio,source');
+      const nodes = scope.querySelectorAll('video,source');
       nodes.forEach((el) => {
         const isSource = el.tagName === 'SOURCE';
+        const parent = el.parentElement;
+        // <source> 挂在 <audio> 下面的一律跳过
+        if (isSource && (!parent || parent.tagName !== 'VIDEO')) return;
         if (isSource && !el.src) return;
         const src = isSource ? el.src
           : (el.currentSrc || el.src || (el.querySelector && (el.querySelector('source[src]') || {}).src));
         if (!src) return;
-        const mediaCat = (el.tagName === 'AUDIO' || (el.parentElement && el.parentElement.tagName === 'AUDIO')) ? 'audio' : 'video';
         report(src, {
           force: true,
-          mediaCat: mediaCat,
+          mediaCat: 'video',
           name: isSource ? '' : titleOf(el),
           duration: (!isSource && isFinite(el.duration) && el.duration > 0) ? el.duration : 0
         });
@@ -233,12 +233,6 @@
   /* ---------------- 界面（只画在顶层框架） ---------------- */
 
   if (!IS_TOP) return;
-
-  const CATS = [
-    { key: 'video', label: '视频' },
-    { key: 'image', label: '图片' },
-    { key: 'audio', label: '音频' }
-  ];
 
   const CSS = `
 *,*::before,*::after{box-sizing:border-box}
@@ -284,8 +278,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 </div>
 <div class="mask" id="mask"></div>
 <div class="sheet" id="sheet">
-  <div class="hd"><div class="hd-t">找到 <b id="cnt">0</b> 个资源</div><button class="ib" id="close">✕</button></div>
-  <div class="tabs" id="tabs"></div>
+  <div class="hd"><div class="hd-t">找到 <b id="cnt">0</b> 个视频</div><button class="ib" id="close">✕</button></div>
   <div class="list" id="list"></div>
   <div class="ft">点「下载」会跳转到 App；也可以复制链接交给别的下载器</div>
 </div>
@@ -294,7 +287,6 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 
   let ui = null;
   let items = [];
-  let filter = 'video';
 
   function mount() {
     if (ui || !document.documentElement) return;
@@ -317,25 +309,8 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
       fab: root.getElementById('fab'), badge: root.getElementById('badge'),
       mask: root.getElementById('mask'), sheet: root.getElementById('sheet'),
       list: root.getElementById('list'), cnt: root.getElementById('cnt'),
-      tabs: root.getElementById('tabs'),
       toast: root.getElementById('toast'), toastT: root.getElementById('toast-t')
     };
-
-    // 分类按钮
-    CATS.forEach((c) => {
-      const b = document.createElement('button');
-      b.className = 'tab' + (c.key === filter ? ' on' : '');
-      b.setAttribute('data-cat', c.key);
-      b.textContent = c.label;
-      b.addEventListener('click', () => {
-        filter = c.key;
-        Array.prototype.forEach.call(ui.tabs.children, (t) => {
-          t.className = 'tab' + (t.getAttribute('data-cat') === filter ? ' on' : '');
-        });
-        render(true);
-      });
-      ui.tabs.appendChild(b);
-    });
 
     ui.fab.addEventListener('click', toggle);
     root.getElementById('close').addEventListener('click', close);
@@ -378,33 +353,22 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
     ui.badge.textContent = n > 99 ? '99+' : String(n);
     ui.badge.className = 'badge' + (n ? '' : ' hide');
 
-    // 每个分类上显示数量
-    Array.prototype.forEach.call(ui.tabs.children, (t) => {
-      const k = t.getAttribute('data-cat');
-      const c = catCount(k);
-      const label = (CATS.filter((x) => x.key === k)[0] || {}).label || k;
-      t.textContent = c ? label + ' ' + c : label;
-    });
-
     // 面板没打开就不重建 DOM（这是之前卡顿的主因）
     if (!force && !ui.sheet.classList.contains('on')) return;
 
-    const arr = items.filter((i) => catOf(i) === filter);
     ui.cnt.textContent = String(n);
     ui.list.textContent = '';
 
-    if (!arr.length) {
+    if (!n) {
       const d = document.createElement('div');
       d.className = 'empty';
-      d.textContent = n
-        ? '这个分类下暂时没有资源。\n可以切到别的分类看看。'
-        : '还没找到资源。\n先播放视频 / 滚动页面加载图片，再点这个按钮。';
+      d.textContent = '还没找到视频。\n先点播放让它跑几秒，再点这个按钮。';
       ui.list.appendChild(d);
       return;
     }
 
     const frag = document.createDocumentFragment();
-    arr.forEach((it) => frag.appendChild(rowEl(it)));
+    items.forEach((it) => frag.appendChild(rowEl(it)));
     ui.list.appendChild(frag);
   }
 

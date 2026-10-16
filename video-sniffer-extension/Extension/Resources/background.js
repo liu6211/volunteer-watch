@@ -181,12 +181,15 @@ function pushToTab(tabId, immediate) {
   }, 250));
 }
 
-/* 只收三类资源：视频 / 图片 / 音频（m3u8 归到视频）。
- * 网页自身的东西（html/js/css/字体）以及文档压缩包一律不要。 */
+/* 只收视频。（早期版本把图片、音频、文档都收进来，结果一页 130 张图，
+ * 真正的视频被淹没。）
+ *
+ * 另外：HLS 的 .ts / .m4s 分片不单独列出——一个 44 分钟的视频有几百个分片，
+ * 全列出来就是噪音。播放 HLS 时 Safari 必然加载过那条 m3u8，所以只要收
+ * m3u8，就是用户真正要的那一条。
+ */
 const CAT_EXT = {
-  video: ['mp4', 'm4v', 'mov', 'webm', 'mkv', 'flv', 'f4v', 'avi', 'wmv', '3gp', '3g2', 'ogv', 'mpg', 'mpeg', 'rmvb', 'm2ts', 'mts', 'ts', 'm4s'],
-  image: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic', 'heif', 'avif', 'svg', 'ico', 'tif', 'tiff'],
-  audio: ['mp3', 'm4a', 'aac', 'flac', 'wav', 'ogg', 'oga', 'opus', 'wma', 'ape']
+  video: ['mp4', 'm4v', 'mov', 'webm', 'mkv', 'flv', 'f4v', 'avi', 'wmv', '3gp', '3g2', 'ogv', 'mpg', 'mpeg', 'rmvb', 'm2ts', 'mts']
 };
 
 const EXT_KIND = {};
@@ -194,14 +197,18 @@ Object.keys(CAT_EXT).forEach(function (k) {
   CAT_EXT[k].forEach(function (e) { EXT_KIND[e] = k; });
 });
 
+// 分片类：不作为独立条目列出
+const SEGMENT_EXT = { ts: 1, m4s: 1 };
+
 function classify(url) {
   let ext = '';
   try {
     const m = /\.([a-z0-9]{1,6})$/.exec(new URL(url).pathname.toLowerCase());
     if (m) ext = m[1];
   } catch (e) {}
-  if (!ext) return null;                       // 无扩展名的只认 DOM 里的 <video>/<audio>
+  if (!ext) return null;                       // 无扩展名的只认 DOM 里的 <video>
 
+  if (SEGMENT_EXT[ext]) return null;           // 分片不单列
   if (ext === 'm3u8' || ext === 'mpd') return { kind: 'hls', cat: 'video', ext: ext };
 
   const cat = EXT_KIND[ext];
@@ -211,12 +218,30 @@ function classify(url) {
 
 const GENERIC = /^(index|playlist|master|hls|media|video|vod|out|stream|manifest|chunk|file|main|v|\d+)$/i;
 
+const GENERIC_STEM = {
+  index: 1, playlist: 1, master: 1, media: 1, manifest: 1, hls: 1, vod: 1, out: 1,
+  stream: 1, chunk: 1, video: 1, main: 1, file: 1, v: 1, seg: 1, init: 1, play: 1, m: 1
+};
+
 function autoName(url) {
-  let bn = '';
-  try { bn = decodeURIComponent(new URL(url).pathname.split('/').filter(Boolean).pop() || ''); } catch (e) {}
-  const stem = bn.replace(/\.[a-z0-9]{2,5}$/i, '');
-  if (stem && stem.length > 2 && !GENERIC.test(stem)) return bn;
-  return 'media-' + Math.random().toString(36).slice(2, 6);
+  let bn = '', host = '';
+  try {
+    const u = new URL(url);
+    host = u.hostname.replace(/^www\./, '');
+    bn = decodeURIComponent(u.pathname.split('/').filter(Boolean).pop() || '');
+  } catch (e) {}
+
+  if (!bn) return host || url.slice(-40);
+
+  const stem = bn.replace(/\.[a-z0-9]{1,6}$/i, '').toLowerCase();
+  const hashLike = stem.length >= 8 && /[0-9]/.test(stem) && !/[aeiou]{2}/.test(stem);
+
+  // 文件名本身没信息（index / playlist / 一长串哈希）时补上域名，
+  // 否则列表里一排都叫 index.m3u8，根本分不清是哪个站的
+  if (GENERIC_STEM[stem] || hashLike) {
+    return host ? host + '/' + bn : bn;
+  }
+  return bn;
 }
 
 function onFound(tabId, raw, meta) {
@@ -291,31 +316,31 @@ async function probeHls(it) {
   const res = await fetch(it.url);
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const text = await res.text();
-  const pl = parsePlaylist(text, it.url);
+  let pl = parsePlaylist(text, it.url);
 
   it.encrypted = !!(pl.encrypted && !pl.sampleAes);
 
+  // 主播放列表：挑码率最高的一路，然后拿它的媒体列表
+  let bandwidth = 0;
   if (pl.isMaster && pl.variants.length) {
     const best = pl.variants.slice().sort((a, b) => b.bandwidth - a.bandwidth)[0];
-    it.segments = 0;
+    bandwidth = best.bandwidth || 0;
     try {
       const r2 = await fetch(best.url);
-      const p2 = parsePlaylist(await r2.text(), best.url);
-      if (p2.duration) it.duration = p2.duration;
-      it.segments = p2.segments.length;
-      if (best.bandwidth && p2.duration) {
-        it.size = Math.round((p2.duration * best.bandwidth) / 8);
-        it.sizeMode = 'estimate';
-      }
+      pl = parsePlaylist(await r2.text(), best.url);
     } catch (e) {}
-    return;
   }
 
   if (pl.duration) it.duration = pl.duration;
   it.segments = pl.segments.length;
 
-  // 全部是 BYTERANGE 时可以精确算出总大小
-  if (pl.segments.length && pl.segments.every((s) => !!s.range)) {
+  if (!it.segments) {
+    // 既不是主列表也没有分片：可能是一层套一层，先放弃大小
+    return;
+  }
+
+  // 1) 全部分片都是 BYTERANGE —— 可以精确求和，一个请求都不用发
+  if (pl.segments.every((s) => !!s.range)) {
     let total = 0;
     pl.segments.forEach((s) => { total += s.range.length; });
     if (pl.map && pl.map.range) total += pl.map.range.length;
@@ -324,28 +349,48 @@ async function probeHls(it) {
     return;
   }
 
-  // 否则取首尾两个分片估算
-  if (!it.size && pl.segments.length) {
-    const picks = [0, pl.segments.length - 1].filter((v, i, a) => pl.segments[v] && a.indexOf(v) === i);
-    let sum = 0, n = 0;
-    for (const idx of picks) {
-      try {
-        const r = await fetch(pl.segments[idx].url, { headers: { Range: 'bytes=0-0' } });
-        const h = parseHeaders(r.headers);
-        const m = /\/(\d+)\s*$/.exec(h['content-range'] || '');
-        if (m) { sum += parseInt(m[1], 10) / pl.segments.length; n++; }
-        try { if (r.body && r.body.cancel) r.body.cancel(); } catch (e) {}
-      } catch (e) {}
+  // 2) 采样首 / 中 / 尾三个分片，按平均值 × 分片数估算
+  const n = pl.segments.length;
+  const idxs = [];
+  [0, Math.floor(n / 2), n - 1].forEach((v) => {
+    if (v >= 0 && v < n && idxs.indexOf(v) < 0) idxs.push(v);
+  });
+
+  let sum = 0, cnt = 0;
+  for (const idx of idxs) {
+    try {
+      const r = await fetch(pl.segments[idx].url, { headers: { Range: 'bytes=0-0' } });
+      const h = parseHeaders(r.headers);
+      const m = /\/(\d+)\s*$/.exec(h['content-range'] || '');
+      let one = 0;
+      if (m) one = parseInt(m[1], 10);
+      else if (h['content-length']) one = parseInt(h['content-length'], 10);
+      if (one > 0) { sum += one; cnt++; }
+      try { if (r.body && r.body.cancel) r.body.cancel(); } catch (e) {}
+    } catch (e) {}
+  }
+
+  if (cnt > 0) {
+    it.size = Math.round((sum / cnt) * n);
+    it.sizeMode = 'estimate';
+    return;
+  }
+
+  // 3) 服务器不支持 Range：整下第一个分片量一次
+  try {
+    const r = await fetch(pl.segments[0].url);
+    const buf = await r.arrayBuffer();
+    if (buf.byteLength > 0) {
+      it.size = buf.byteLength * n;
+      it.sizeMode = 'estimate';
+      return;
     }
-    if (n === 0) {
-      // 拿不到 Content-Range 就整体下第一个分片量一下
-      try {
-        const r = await fetch(pl.segments[0].url);
-        const buf = await r.arrayBuffer();
-        it.size = Math.round((buf.byteLength / pl.segments.length) * pl.segments.length);
-        it.sizeMode = 'estimate';
-      } catch (e) {}
-    }
+  } catch (e) {}
+
+  // 4) 最后的兜底：码率 × 时长
+  if (bandwidth && it.duration) {
+    it.size = Math.round((it.duration * bandwidth) / 8);
+    it.sizeMode = 'estimate';
   }
 }
 
