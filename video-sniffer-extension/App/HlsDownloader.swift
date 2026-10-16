@@ -33,6 +33,33 @@ enum HlsError: LocalizedError {
 
 final class HlsDownloader {
 
+    /// 请求上下文：很多 CDN 做防盗链，只认从页面发起的请求。
+    /// Referer 用扩展传过来的原始页面地址。
+    struct Context {
+        var referer: String?
+        var origin: String?
+        var userAgent: String
+
+        static let safari = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) "
+            + "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
+
+        init(pageURL: String?, userAgent: String = Context.safari) {
+            self.userAgent = userAgent
+            if let p = pageURL, let u = URL(string: p), let scheme = u.scheme, let host = u.host {
+                // Referer 丢掉 fragment，只保留原始地址
+                self.referer = p
+                self.origin = "\(scheme)://\(host)"
+            }
+        }
+
+        func apply(to req: inout URLRequest) {
+            req.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+            if let r = referer { req.setValue(r, forHTTPHeaderField: "Referer") }
+            if let o = origin { req.setValue(o, forHTTPHeaderField: "Origin") }
+            req.setValue("zh-CN,zh;q=0.9,en;q=0.8", forHTTPHeaderField: "Accept-Language")
+        }
+    }
+
     // MARK: 数据结构
 
     struct Key {
@@ -62,9 +89,13 @@ final class HlsDownloader {
     private let session: URLSession
     private let fm = FileManager.default
     private let concurrency = 4
+    private var ctx: Context
     private(set) var isCancelled = false
 
-    init(session: URLSession) { self.session = session }
+    init(session: URLSession, context: Context) {
+        self.session = session
+        self.ctx = context
+    }
 
     func cancel() { isCancelled = true }
 
@@ -164,47 +195,57 @@ final class HlsDownloader {
     // MARK: 播放列表
 
     func loadPlaylist(_ url: URL) async throws -> Playlist {
-        let text = try await fetchText(url)
+        var text: String
+        do {
+            text = try await fetchText(url, ctx: ctx)
+        } catch HlsError.http(403) where ctx.referer != nil {
+            // 少数站点反过来：带 Referer 反而被拒。去掉再试一次。
+            var alt = ctx
+            alt.referer = nil
+            alt.origin = nil
+            text = try await fetchText(url, ctx: alt)
+        }
         return parse(text, baseURL: url)
     }
 
-    private func fetchText(_ url: URL) async throws -> String {
-        var req = URLRequest(url: url)
-        req.timeoutInterval = 30
-        let (data, resp) = try await session.data(for: req)
-        if let http = resp as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
-            throw HlsError.http(http.statusCode)
-        }
+    private func fetchText(_ url: URL, ctx: Context? = nil) async throws -> String {
+        let data = try await rawGet(url, ctx: ctx, timeout: 30)
         if let s = String(data: data, encoding: .utf8) { return s }
         if let s = String(data: data, encoding: .isoLatin1) { return s }
         throw HlsError.emptyPlaylist
     }
 
-    private func fetchData(_ url: URL) async throws -> Data {
-        try await fetchData(url: url.absoluteString)
-    }
-
-    private func fetchData(url: String) async throws -> Data {
-        guard let u = URL(string: url) else { throw HlsError.badKey }
-        let (data, resp) = try await session.data(from: u)
+    /// 统一的 GET：带上防盗链请求头
+    private func rawGet(_ url: URL, ctx ctxOverride: Context? = nil, timeout: TimeInterval,
+                        range: (Int64, Int64)? = nil) async throws -> Data {
+        var req = URLRequest(url: url)
+        req.timeoutInterval = timeout
+        (ctxOverride ?? ctx).apply(to: &req)
+        if let (off, len) = range {
+            req.setValue("bytes=\(off)-\(off + len - 1)", forHTTPHeaderField: "Range")
+        }
+        let (data, resp) = try await session.data(for: req)
         if let http = resp as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
             throw HlsError.http(http.statusCode)
         }
         return data
     }
 
+    private func fetchData(_ url: URL) async throws -> Data {
+        try await rawGet(url, timeout: 30)
+    }
+
+    private func fetchData(url: String) async throws -> Data {
+        guard let u = URL(string: url) else { throw HlsError.badKey }
+        return try await rawGet(u, timeout: 30)
+    }
+
     // MARK: 取一个分片（含解密）
 
     private func fetchSegment(_ seg: Segment, keys: [String: Data]) async throws -> Data {
-        var req = URLRequest(url: seg.url)
-        req.timeoutInterval = 60
-        if let off = seg.offset, let len = seg.length {
-            req.setValue("bytes=\(off)-\(off + len - 1)", forHTTPHeaderField: "Range")
-        }
-        let (raw, resp) = try await session.data(for: req)
-        if let http = resp as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
-            throw HlsError.http(http.statusCode)
-        }
+        var range: (Int64, Int64)?
+        if let off = seg.offset, let len = seg.length { range = (off, len) }
+        let raw = try await rawGet(seg.url, timeout: 60, range: range)
 
         guard let key = seg.key, key.method.uppercased() == "AES-128",
               let uri = key.uri?.absoluteString, let keyData = keys[uri] else {

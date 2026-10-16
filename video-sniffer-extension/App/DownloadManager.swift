@@ -270,6 +270,8 @@ final class DownloadManager: NSObject, ObservableObject {
     private func startProgressive(_ it: DownloadItem, useForeground: Bool) {
         guard let url = URL(string: it.url) else { return }
         let session: URLSession = useForeground ? fgSession : bgSession
+        var req = URLRequest(url: url)
+        requestContext(for: it).apply(to: &req)
 
         // 有断点数据就续传。注意：失败重试时不复用，避免坏数据反复失败。
         let resumeFile = mediaDir.appendingPathComponent("resume-\(it.id.uuidString).dat")
@@ -279,7 +281,7 @@ final class DownloadManager: NSObject, ObservableObject {
             task = session.downloadTask(withResumeData: data)
             try? fm.removeItem(at: resumeFile)
         } else {
-            task = session.downloadTask(with: url)
+            task = session.downloadTask(with: req)
         }
         task.taskDescription = it.id.uuidString
         if useForeground { beginBGAssertion(it.id) }
@@ -323,6 +325,7 @@ final class DownloadManager: NSObject, ObservableObject {
         var req = URLRequest(url: url)
         req.timeoutInterval = 60 * 30
         req.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
+        requestContext(for: it).apply(to: &req)
 
         let task = Task { [weak self] in
             guard let self else { return }
@@ -388,6 +391,11 @@ final class DownloadManager: NSObject, ObservableObject {
         }
     }
 
+    /// 很多 CDN 做防盗链：只认带 Referer 的请求。页面地址由扩展通过 &page= 传过来。
+    private func requestContext(for it: DownloadItem) -> HlsDownloader.Context {
+        HlsDownloader.Context(pageURL: it.pageURL)
+    }
+
     /// HLS：用自己实现的下载器（解析 m3u8 → 逐段下载 → AES 解密 → 顺序合并）
     private func startHLS(_ it: DownloadItem) {
         guard let url = URL(string: it.url) else { return }
@@ -400,7 +408,7 @@ final class DownloadManager: NSObject, ObservableObject {
         let merged = mediaDir.appendingPathComponent(stem + ".part")
         let workDir = mediaDir.appendingPathComponent("hls-\(id.uuidString)", isDirectory: true)
 
-        let downloader = HlsDownloader(session: fgSession)
+        let downloader = HlsDownloader(session: fgSession, context: requestContext(for: it))
         hlsDownloaders[id] = downloader
         update(id) { $0.state = .downloading; $0.error = nil; $0.hlsProgress = 0 }
 
