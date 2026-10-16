@@ -76,7 +76,17 @@ struct DownloadItem: Identifiable, Codable, Equatable {
         let bad = CharacterSet(charactersIn: "/\\:*?\"<>|\n\r\t")
         s = s.components(separatedBy: bad).joined(separator: "_")
         if s.count > 80 { s = String(s.prefix(80)) }
-        if !s.lowercased().hasSuffix("." + fallbackExt) && !s.lowercased().hasSuffix(".mov") {
+
+        // 已有媒体后缀就换掉，而不是再拼一个（避免出现 xxx.m3u8.mp4）
+        let known: Set<String> = ["mp4", "m4v", "mov", "webm", "mkv", "ts", "m3u8", "mpd",
+                                  "flv", "avi", "m4s", "part", "mp3", "m4a", "aac"]
+        if let dot = s.lastIndex(of: "."), dot < s.index(before: s.endIndex) {
+            let ext = s[s.index(after: dot)...].lowercased()
+            if known.contains(ext) && ext != fallbackExt.lowercased() {
+                s = String(s[..<dot])
+            }
+        }
+        if !s.lowercased().hasSuffix("." + fallbackExt.lowercased()) {
             s += "." + fallbackExt
         }
         return s

@@ -50,14 +50,12 @@ final class DownloadManager: NSObject, ObservableObject {
     @Published var toast: String?
 
     private let bgID = "com.vsd.VideoSniffer.bg"
-    private let hlsID = "com.vsd.VideoSniffer.hls"
     private let fm = FileManager.default
 
     private(set) var mediaDir: URL
     private let storeURL: URL
 
     private var bgSession: URLSession!
-    private var hlsSession: AVAssetDownloadURLSession!
     /// 后台会话写临时文件失败时（锁屏/切后台最容易触发），用它兜底重下
     private var fgSession: URLSession!
 
@@ -66,6 +64,8 @@ final class DownloadManager: NSObject, ObservableObject {
     private var bgAssertions: [UUID: UIBackgroundTaskIdentifier] = [:]
     /// 流式下载（不经过系统临时文件）的任务句柄
     private var streamTasks: [UUID: Task<Void, Never>] = [:]
+    /// 自己实现的 HLS 下载器（不再用 AVAssetDownloadTask）
+    private var hlsDownloaders: [UUID: HlsDownloader] = [:]
 
     private let pathMonitor = NWPathMonitor()
     private var isCellular = false
@@ -88,12 +88,6 @@ final class DownloadManager: NSObject, ObservableObject {
         bgConfig.sessionSendsLaunchEvents = true
         bgConfig.allowsCellularAccess = true      // 永远允许；仅 Wi-Fi 由代码在启动任务前判断
         bgSession = URLSession(configuration: bgConfig, delegate: self, delegateQueue: .main)
-
-        let hlsConfig = URLSessionConfiguration.background(withIdentifier: hlsID)
-        hlsConfig.isDiscretionary = false
-        hlsConfig.sessionSendsLaunchEvents = true
-        hlsConfig.allowsCellularAccess = true
-        hlsSession = AVAssetDownloadURLSession(configuration: hlsConfig, assetDownloadDelegate: self, delegateQueue: .main)
 
         // 前台会话：默认配置，写的是 App 自己的目录，不受 nsurlsessiond 限制
         let fgConfig = URLSessionConfiguration.default
@@ -162,17 +156,6 @@ final class DownloadManager: NSObject, ObservableObject {
     /// App 冷启动时把系统里还活着的任务认回来
     func restoreTasks() {
         bgSession.getAllTasks { [weak self] tasks in
-            guard let self else { return }
-            for t in tasks {
-                guard let idStr = t.taskDescription, let id = UUID(uuidString: idStr) else { continue }
-                if self.items.contains(where: { $0.id == id }) {
-                    self.update(id) { $0.state = .downloading }
-                } else {
-                    t.cancel()
-                }
-            }
-        }
-        hlsSession.getAllTasks { [weak self] tasks in
             guard let self else { return }
             for t in tasks {
                 guard let idStr = t.taskDescription, let id = UUID(uuidString: idStr) else { continue }
@@ -405,24 +388,108 @@ final class DownloadManager: NSObject, ObservableObject {
         }
     }
 
+    /// HLS：用自己实现的下载器（解析 m3u8 → 逐段下载 → AES 解密 → 顺序合并）
     private func startHLS(_ it: DownloadItem) {
         guard let url = URL(string: it.url) else { return }
-        let asset = AVURLAsset(url: url)
-        let options: [String: Any] = [
-            AVAssetDownloadTaskMinimumRequiredMediaBitrateKey: 800_000
-        ]
-        guard let task = hlsSession.makeAssetDownloadTask(
-            asset: asset,
-            assetTitle: it.name,
-            assetArtworkData: nil,
-            options: options
-        ) else {
-            update(it.id) { $0.state = .failed; $0.error = "无法创建 HLS 下载任务" }
+        let id = it.id
+        usedFallback.insert(id)
+        beginBGAssertion(id)
+
+        let base = DownloadItem.safeName(it.name, fallbackExt: "mp4")
+        let stem = (base as NSString).deletingPathExtension
+        let merged = mediaDir.appendingPathComponent(stem + ".part")
+        let workDir = mediaDir.appendingPathComponent("hls-\(id.uuidString)", isDirectory: true)
+
+        let downloader = HlsDownloader(session: fgSession)
+        hlsDownloaders[id] = downloader
+        update(id) { $0.state = .downloading; $0.error = nil; $0.hlsProgress = 0 }
+
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let result = try await downloader.download(
+                    playlistURL: url, destURL: merged, workDir: workDir
+                ) { p, bytes in
+                    DispatchQueue.main.async {
+                        self.update(id) { $0.hlsProgress = p; $0.receivedBytes = bytes }
+                    }
+                }
+                try? self.fm.removeItem(at: workDir)
+                await MainActor.run {
+                    self.finishHLS(id: id, merged: result.url, isFMP4: result.isFMP4, stem: stem)
+                }
+            } catch {
+                try? self.fm.removeItem(at: workDir)
+                await MainActor.run {
+                    self.hlsDownloaders.removeValue(forKey: id)
+                    let ns = error as NSError
+                    self.update(id) {
+                        $0.state = .failed
+                        $0.error = "\(error.localizedDescription)  [\(ns.domain) \(ns.code)]"
+                    }
+                    self.endBGAssertion(id)
+                    self.pump()
+                }
+            }
+        }
+    }
+
+    /// 合并完成后的收尾：fMP4 本身就是 mp4；TS 先试着转 mp4，转不动就留 .ts
+    private func finishHLS(id: UUID, merged: URL, isFMP4: Bool, stem: String) {
+        hlsDownloaders.removeValue(forKey: id)
+
+        let mp4 = mediaDir.appendingPathComponent(stem + ".mp4")
+
+        if isFMP4 {
+            try? fm.removeItem(at: mp4)
+            if (try? fm.moveItem(at: merged, to: mp4)) != nil {
+                finishFile(id: id, url: mp4)
+            } else {
+                update(id) { $0.state = .failed; $0.error = "合并文件写入失败" }
+                endBGAssertion(id)
+                pump()
+            }
             return
         }
-        task.taskDescription = it.id.uuidString
-        update(it.id) { $0.state = .downloading; $0.error = nil; $0.hlsProgress = 0 }
-        task.resume()
+
+        update(id) { $0.state = .merging }
+        try? fm.removeItem(at: mp4)
+
+        runExport(asset: AVURLAsset(url: merged), preset: AVAssetExportPresetPassthrough, to: mp4) { [weak self] ok, _ in
+            guard let self else { return }
+            if ok, self.fm.fileExists(atPath: mp4.path) {
+                try? self.fm.removeItem(at: merged)
+                self.finishFile(id: id, url: mp4)
+                return
+            }
+            self.runExport(asset: AVURLAsset(url: merged), preset: AVAssetExportPresetHighestQuality, to: mp4) { ok2, err2 in
+                if ok2, self.fm.fileExists(atPath: mp4.path) {
+                    try? self.fm.removeItem(at: merged)
+                    self.finishFile(id: id, url: mp4)
+                    return
+                }
+                // 转不了就保住 .ts —— VLC / nPlayer 都能播，总比什么都没有强
+                try? self.fm.removeItem(at: mp4)
+                let ts = self.mediaDir.appendingPathComponent(stem + ".ts")
+                try? self.fm.removeItem(at: ts)
+                if (try? self.fm.moveItem(at: merged, to: ts)) != nil {
+                    let attrs = try? self.fm.attributesOfItem(atPath: ts.path)
+                    let size = (attrs?[.size] as? Int64) ?? 0
+                    self.update(id) {
+                        $0.state = .done
+                        $0.localPath = ts.path
+                        $0.error = nil
+                        $0.receivedBytes = size
+                        $0.totalBytes = size
+                    }
+                    self.say("已存为 .ts（转 mp4 失败：\(err2 ?? "未知原因")）")
+                } else {
+                    self.update(id) { $0.state = .failed; $0.error = "保存合并文件失败" }
+                }
+                self.endBGAssertion(id)
+                self.pump()
+            }
+        }
     }
 
     // MARK: - 控制
@@ -467,14 +534,13 @@ final class DownloadManager: NSObject, ObservableObject {
             })
         }
 
-        hlsSession.getAllTasks { [weak self] tasks in
-            guard let self else { return }
-            if let t = tasks.first(where: { $0.taskDescription == id.uuidString }) {
-                t.cancel()
-                self.update(id) { $0.state = .paused }
-            } else if it.isHLS {
-                self.update(id) { $0.state = .paused }
-            }
+        // 自己实现的 HLS 下载器：直接取消，状态存成暂停
+        if let d = hlsDownloaders.removeValue(forKey: id) {
+            d.cancel()
+            endBGAssertion(id)
+            update(id) { $0.state = .paused }
+        } else if it.isHLS {
+            update(id) { $0.state = .paused }
         }
     }
 
@@ -493,14 +559,12 @@ final class DownloadManager: NSObject, ObservableObject {
     func cancel(_ id: UUID) {
         endBGAssertion(id)
         if let t = streamTasks.removeValue(forKey: id) { t.cancel() }
+        if let d = hlsDownloaders.removeValue(forKey: id) { d.cancel() }
         let idStr = id.uuidString
         bgSession.getAllTasks { tasks in
             tasks.first { $0.taskDescription == idStr }?.cancel()
         }
         fgSession.getAllTasks { tasks in
-            tasks.first { $0.taskDescription == idStr }?.cancel()
-        }
-        hlsSession.getAllTasks { tasks in
             tasks.first { $0.taskDescription == idStr }?.cancel()
         }
     }
@@ -578,36 +642,7 @@ final class DownloadManager: NSObject, ObservableObject {
         pump()
     }
 
-    // MARK: - HLS 导出
-
-    private func exportHLS(id: UUID, location: URL) {
-        guard let it = item(id) else { return }
-        let outURL = mediaDir.appendingPathComponent(DownloadItem.safeName(it.name, fallbackExt: "mp4"))
-        if fm.fileExists(atPath: outURL.path) { try? fm.removeItem(at: outURL) }
-
-        update(id) { $0.state = .merging }
-
-        let asset = AVURLAsset(url: location)
-        runExport(asset: asset, preset: AVAssetExportPresetPassthrough, to: outURL) { [weak self] ok, err in
-            guard let self else { return }
-            if ok {
-                self.finishFile(id: id, url: outURL)
-                return
-            }
-            // 直通导出常对 TS 分片失败，回退成重新编码
-            self.runExport(asset: AVURLAsset(url: location), preset: AVAssetExportPresetHighestQuality, to: outURL) { ok2, err2 in
-                if ok2 {
-                    self.finishFile(id: id, url: outURL)
-                } else {
-                    self.update(id) {
-                        $0.state = .failed
-                        $0.error = "导出失败：" + (err2 ?? err ?? "未知原因")
-                    }
-                    self.pump()
-                }
-            }
-        }
-    }
+    // MARK: - 转封装（TS → mp4）
 
     private func runExport(asset: AVAsset, preset: String, to outURL: URL,
                            completion: @escaping (Bool, String?) -> Void) {
@@ -753,33 +788,6 @@ extension DownloadManager: URLSessionDownloadDelegate {
             self?.backgroundCompletionHandler?()
             self?.backgroundCompletionHandler = nil
         }
-    }
-}
-
-// MARK: - HLS 下载
-
-extension DownloadManager: AVAssetDownloadDelegate {
-
-    func urlSession(_ session: URLSession, assetDownloadTask: AVAssetDownloadTask,
-                    didLoad timeRange: CMTimeRange, totalTimeRangesLoaded loadedTimeRanges: [NSValue],
-                    timeRangeExpectedToLoad: CMTimeRange) {
-        guard let idStr = assetDownloadTask.taskDescription, let id = UUID(uuidString: idStr) else { return }
-        let expected = CMTimeGetSeconds(timeRangeExpectedToLoad.duration)
-        guard expected > 0 else { return }
-        var done = 0.0
-        for v in loadedTimeRanges {
-            done += CMTimeGetSeconds(v.timeRangeValue.duration)
-        }
-        update(id) { it in
-            it.state = .downloading
-            it.hlsProgress = min(1, done / expected)
-        }
-    }
-
-    func urlSession(_ session: URLSession, assetDownloadTask: AVAssetDownloadTask,
-                    didFinishDownloadingTo location: URL) {
-        guard let idStr = assetDownloadTask.taskDescription, let id = UUID(uuidString: idStr) else { return }
-        exportHLS(id: id, location: location)
     }
 }
 
