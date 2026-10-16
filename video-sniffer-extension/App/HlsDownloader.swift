@@ -236,7 +236,7 @@ final class HlsDownloader {
                     iv.withUnsafeBytes { ivBuf in
                         CCCrypt(CCOperation(kCCDecrypt),
                                 CCAlgorithm(kCCAlgorithmAES),
-                                CCOptions(kCCOptionsPKCS7Padding),
+                                CCOptions(kCCOptionPKCS7Padding),
                                 keyBuf.baseAddress, key.count,
                                 ivBuf.baseAddress,
                                 dataBuf.baseAddress, data.count,
