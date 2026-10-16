@@ -245,10 +245,16 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
       const mt = document.createElement('div');
       mt.className = 'mt';
       const parts = [];
-      if (it.duration) parts.push(fmtDur(it.duration));
+      parts.push(it.duration ? fmtDur(it.duration) : '时长未知');
       parts.push(it.size ? (it.sizeMode === 'estimate' ? '≈' : '') + fmtSize(it.size) : '大小未知');
+      if (it.width && it.height) parts.push(it.width + '×' + it.height);
       if (it.kind === 'hls') parts.push('分片流');
       else if (it.kind === 'audio') parts.push('音频');
+      else {
+        let ext = '';
+        try { ext = (new URL(it.url).pathname.split('.').pop() || '').toUpperCase(); } catch (e) {}
+        if (ext && ext.length <= 5) parts.push(ext);
+      }
       if (it.probing) parts.push('读取中…');
       parts.forEach((p) => {
         const s = document.createElement('span');
@@ -261,18 +267,18 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
       const btns = document.createElement('div');
       btns.className = 'btns';
 
+      const bDl = document.createElement('button');
+      bDl.className = 'b pri';
+      bDl.textContent = '下载';
+      bDl.addEventListener('click', (e) => { e.stopPropagation(); openInApp(it); });
+
       const bCopy = document.createElement('button');
-      bCopy.className = 'b pri';
+      bCopy.className = 'b';
       bCopy.textContent = '复制链接';
       bCopy.addEventListener('click', (e) => { e.stopPropagation(); copy(it.url); });
 
-      const bDl = document.createElement('button');
-      bDl.className = 'b';
-      bDl.textContent = '下载';
-      bDl.addEventListener('click', (e) => { e.stopPropagation(); download(it); });
-
-      btns.appendChild(bCopy);
       btns.appendChild(bDl);
+      btns.appendChild(bCopy);
 
       row.appendChild(info);
       row.appendChild(btns);
@@ -295,31 +301,73 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
     } catch (e) { toast('复制失败'); }
   }
 
-  function download(it) {
-    if (it.kind === 'hls') {
-      toast('分片流需要合并，第一版请先用「复制链接」交给下载器 App');
-      return;
+  /* ---------------- 时长 / 分辨率探测 ----------------
+   * 媒体元素的加载不受 CORS 限制，所以在页面里塞一个隐藏的 <video>
+   * 读 loadedmetadata，就能拿到时长和分辨率——mp4 和 m3u8 都行。
+   */
+  const metaCache = new Map();
+
+  function reportMeta(url, meta) {
+    try {
+      api.runtime.sendMessage({
+        type: 'vsd-media-meta', url: url,
+        duration: meta.duration || 0, width: meta.width || 0, height: meta.height || 0
+      }, () => { void api.runtime.lastError; });
+    } catch (e) {}
+  }
+
+  function probeMedia(url) {
+    if (metaCache.has(url)) { reportMeta(url, metaCache.get(url)); return; }
+
+    let v;
+    try { v = document.createElement('video'); } catch (e) { return; }
+    v.preload = 'metadata';
+    v.muted = true;
+    v.setAttribute('playsinline', '');
+    v.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;pointer-events:none';
+
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      const meta = {
+        duration: (isFinite(v.duration) && v.duration > 0) ? v.duration : 0,
+        width: v.videoWidth || 0,
+        height: v.videoHeight || 0
+      };
+      metaCache.set(url, meta);
+      try { v.removeAttribute('src'); v.load(); v.remove(); } catch (e) {}
+      if (meta.duration || meta.height) reportMeta(url, meta);
+    };
+
+    v.addEventListener('loadedmetadata', finish);
+    v.addEventListener('error', finish);
+    setTimeout(finish, 9000);
+
+    try {
+      v.src = url;
+      (document.body || document.documentElement).appendChild(v);
+      v.load();
+    } catch (e) { finish(); }
+  }
+
+  /* ---------------- 唤起 App 下载 ---------------- */
+
+  function openInApp(it) {
+    const q = 'url=' + encodeURIComponent(it.url) + '&name=' + encodeURIComponent(it.name || '');
+    const link = 'videosniffer://add?' + q;
+    if (link.length > 7000) { toast('地址太长，请用「复制链接」'); return; }
+    try {
+      const a = document.createElement('a');
+      a.href = link;
+      a.style.cssText = 'position:fixed;left:-9999px';
+      (document.body || document.documentElement).appendChild(a);
+      a.click();
+      setTimeout(() => { try { a.remove(); } catch (e) {} }, 1000);
+      toast('已发送到「视频嗅探」App');
+    } catch (e) {
+      toast('唤起 App 失败，请用「复制链接」');
     }
-    toast('正在取文件…');
-    api.runtime.sendMessage({ type: 'vsd-fetch', url: it.url }, (resp) => {
-      void api.runtime.lastError;
-      if (!resp || !resp.ok) { toast('取文件失败：' + ((resp && resp.error) || '未知错误')); return; }
-      try {
-        const bin = atob(resp.base64);
-        const bytes = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-        const blob = new Blob([bytes], { type: 'application/octet-stream' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = (it.name || 'video').replace(/[\\/:*?"<>|]/g, '_');
-        a.style.cssText = 'position:fixed;left:-9999px';
-        (document.body || document.documentElement).appendChild(a);
-        a.click();
-        toast('已交给 Safari 下载，去「文件」里看');
-        setTimeout(() => { try { a.remove(); URL.revokeObjectURL(url); } catch (e) {} }, 60000);
-      } catch (e) { toast('写入失败：' + e.message); }
-    });
   }
 
   api.runtime.onMessage.addListener((msg) => {
@@ -327,6 +375,9 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
       items = msg.items || [];
       mount();
       render();
+    }
+    if (msg && msg.type === 'vsd-probe-media' && msg.url) {
+      probeMedia(msg.url);
     }
     return false;
   });

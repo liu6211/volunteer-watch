@@ -149,7 +149,7 @@ function snapshot(tabId) {
       url: it.url, kind: it.kind, name: it.name, t: it.t,
       duration: it.duration || 0, size: it.size || 0, sizeMode: it.sizeMode || null,
       segments: it.segments || 0, encrypted: !!it.encrypted, error: it.error || null,
-      probing: !!it.probing
+      probing: !!it.probing, width: it.width || 0, height: it.height || 0
     });
   });
   arr.sort((a, b) => (b.t - a.t));
@@ -233,6 +233,20 @@ async function probe(tabId, it) {
   it.probing = false;
   it.probed = true;
   pushToTab(tabId);
+
+  // 时长 / 分辨率只有解码器知道，让页面用隐藏的 <video> 读一次元数据。
+  // 媒体元素的加载不受 CORS 限制，所以这一步连跨域 mp4 和 HLS 都能拿到。
+  if (it.kind !== 'dash' && (!it.duration || !it.height)) requestMediaMeta(tabId, it.url);
+}
+
+function requestMediaMeta(tabId, url) {
+  const ask = () => {
+    try {
+      api.tabs.sendMessage(tabId, { type: 'vsd-probe-media', url: url }, () => { void api.runtime.lastError; });
+    } catch (e) {}
+  };
+  ask();
+  setTimeout(ask, 2500);   // 页面脚本可能还没就绪，补一次
 }
 
 async function probeSize(it) {
@@ -332,6 +346,20 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (msg.type === 'vsd-found') {
     if (tabId != null) onFound(tabId, msg.url, msg);
+    sendResponse({ ok: true });
+    return false;
+  }
+
+  if (msg.type === 'vsd-media-meta') {
+    const tid = (sender.tab ? sender.tab.id : tabId);
+    if (tid != null) {
+      const it = bucket(tid).get(msg.url);
+      if (it) {
+        if (msg.duration > 0) it.duration = msg.duration;
+        if (msg.height > 0) { it.height = msg.height; it.width = msg.width; }
+        pushToTab(tid);
+      }
+    }
     sendResponse({ ok: true });
     return false;
   }
