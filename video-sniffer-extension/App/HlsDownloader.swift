@@ -228,8 +228,16 @@ final class HlsDownloader {
 
     static func aesCBCDecrypt(_ data: Data, key: Data, iv: Data) -> Data? {
         guard !data.isEmpty, key.count == kCCKeySizeAES128, iv.count == kCCBlockSizeAES128 else { return nil }
-        var out = Data(count: data.count + kCCBlockSizeAES128)
+
+        // 长度必须在进入 withUnsafeMutableBytes 之前取出来：
+        // 在闭包里再读 out.count 会构成对 out 的重叠访问，Swift 会直接报错。
+        let dataLen = data.count
+        let keyLen = key.count
+        let capacity = dataLen + kCCBlockSizeAES128
+
+        var out = Data(count: capacity)
         var moved = 0
+
         let status: CCCryptorStatus = out.withUnsafeMutableBytes { outBuf in
             data.withUnsafeBytes { dataBuf in
                 key.withUnsafeBytes { keyBuf in
@@ -237,16 +245,16 @@ final class HlsDownloader {
                         CCCrypt(CCOperation(kCCDecrypt),
                                 CCAlgorithm(kCCAlgorithmAES),
                                 CCOptions(kCCOptionPKCS7Padding),
-                                keyBuf.baseAddress, key.count,
+                                keyBuf.baseAddress, keyLen,
                                 ivBuf.baseAddress,
-                                dataBuf.baseAddress, data.count,
-                                outBuf.baseAddress, out.count,
+                                dataBuf.baseAddress, dataLen,
+                                outBuf.baseAddress, capacity,
                                 &moved)
                     }
                 }
             }
         }
-        guard status == kCCSuccess else { return nil }
+        guard status == kCCSuccess, moved > 0, moved <= capacity else { return nil }
         return out.prefix(moved)
     }
 
