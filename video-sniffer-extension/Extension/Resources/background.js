@@ -69,7 +69,7 @@ function parseRange(s) {
 function parsePlaylist(text, baseUrl) {
   const out = {
     isMaster: false, variants: [], segments: [], duration: 0,
-    map: null, encrypted: false, sampleAes: false
+    map: null, encrypted: false, sampleAes: false, targetDuration: 0
   };
   if (!text) return out;
 
@@ -93,6 +93,9 @@ function parsePlaylist(text, baseUrl) {
         const mm = /#EXTINF:\s*([\d.]+)/.exec(line);
         lastDur = mm ? parseFloat(mm[1]) : 0;
         out.duration += lastDur;
+      } else if (line.indexOf('#EXT-X-TARGETDURATION') === 0) {
+        const tm = /#EXT-X-TARGETDURATION:\s*([\d.]+)/.exec(line);
+        if (tm) out.targetDuration = parseFloat(tm[1]) || 0;
       } else if (line.indexOf('#EXT-X-BYTERANGE') === 0) {
         pendingRange = parseRange(line.slice(line.indexOf(':') + 1));
       } else if (line.indexOf('#EXT-X-KEY') === 0) {
@@ -320,22 +323,36 @@ async function probeHls(it) {
 
   it.encrypted = !!(pl.encrypted && !pl.sampleAes);
 
-  // 主播放列表：挑码率最高的一路，然后拿它的媒体列表
+  // 主播放列表：从码率最高的开始逐个试，直到拿到一个真正的媒体列表。
+  // （旧版只试最高码率那一路，取不到就整个放弃——这就是「时长未知」的来源）
   let bandwidth = 0;
   if (pl.isMaster && pl.variants.length) {
-    const best = pl.variants.slice().sort((a, b) => b.bandwidth - a.bandwidth)[0];
-    bandwidth = best.bandwidth || 0;
-    try {
-      const r2 = await fetch(best.url);
-      pl = parsePlaylist(await r2.text(), best.url);
-    } catch (e) {}
+    const ordered = pl.variants.slice().sort((a, b) => b.bandwidth - a.bandwidth);
+    bandwidth = ordered[0].bandwidth || 0;
+    let got = null;
+    for (const v of ordered.slice(0, 4)) {
+      try {
+        const r2 = await fetch(v.url);
+        if (!r2.ok) continue;
+        const p2 = parsePlaylist(await r2.text(), v.url);
+        if (p2.isMaster) continue;               // 还是主列表，继续往里找
+        if (p2.segments.length) { got = p2; bandwidth = v.bandwidth || bandwidth; break; }
+        if (!got) got = p2;                      // 至少有内容就先用着
+      } catch (e) {}
+    }
+    if (got) pl = got;
   }
 
   if (pl.duration) it.duration = pl.duration;
   it.segments = pl.segments.length;
 
+  // 没有 EXTINF（部分直播 / 事件型列表）就用 targetDuration 粗略估
+  if (!it.duration && pl.targetDuration && pl.segments.length) {
+    it.duration = pl.targetDuration * pl.segments.length;
+  }
+
   if (!it.segments) {
-    // 既不是主列表也没有分片：可能是一层套一层，先放弃大小
+    // 既不是主列表也没有分片：大小拿不到，但时长可能已经算出来了
     return;
   }
 
