@@ -17,6 +17,15 @@ struct AppSettings: Codable, Equatable {
     var maxConcurrent = 2             // 同时下载数
 }
 
+/// 环境自检结果：万一还是下不来，靠这个定位是「容器不可写」还是「网络被拒」
+struct DiagResult {
+    var container = ""
+    var documentsWritable = false
+    var tmpWritable = false
+    var mediaDirExists = false
+    var mediaWritable = false
+}
+
 private struct Store: Codable {
     var items: [DownloadItem] = []
     var groups: [String] = ["默认分组"]
@@ -49,6 +58,8 @@ final class DownloadManager: NSObject, ObservableObject {
     /// 已经走过一次兜底的，不要无限重试
     private var usedFallback = Set<UUID>()
     private var bgAssertions: [UUID: UIBackgroundTaskIdentifier] = [:]
+    /// 流式下载（不经过系统临时文件）的任务句柄
+    private var streamTasks: [UUID: Task<Void, Never>] = [:]
 
     var backgroundCompletionHandler: (() -> Void)?
 
@@ -252,12 +263,89 @@ final class DownloadManager: NSObject, ObservableObject {
     }
 
     /// 后台会话写临时文件失败（锁屏 / 切后台最容易触发）时的兜底：
-    /// 改用前台会话重下，同时申请一段后台执行时间，避免一切换就走不动。
+    /// 改用「流式 dataTask + 自己写文件」，完全不依赖系统临时文件。
     private func startFallback(_ id: UUID) {
         guard let it = item(id), !it.isHLS else { return }
+        say("系统下载通道被拒，改用流式通道")
+        startStreamed(it)
+    }
+
+    /// 关键兜底：URLSessionDownloadTask 需要系统先在容器里建临时文件，
+    /// 某些设备/签名环境下这一步会失败（NSURLErrorCannotCreateFile -3000）。
+    /// dataTask 把字节直接交给 App，我们写进 Documents/Media，绕开整个临时文件机制。
+    private func startStreamed(_ it: DownloadItem) {
+        guard let url = URL(string: it.url) else { return }
+        let id = it.id
         usedFallback.insert(id)
-        startProgressive(it, useForeground: true)
-        say("后台通道失败，已改用前台通道重试")
+        beginBGAssertion(id)
+
+        let dest = mediaDir.appendingPathComponent(DownloadItem.safeName(it.name, fallbackExt: "mp4"))
+        try? fm.createDirectory(at: mediaDir, withIntermediateDirectories: true)
+        if fm.fileExists(atPath: dest.path) { try? fm.removeItem(at: dest) }
+        guard fm.createFile(atPath: dest.path, contents: nil),
+              let handle = try? FileHandle(forWritingTo: dest) else {
+            update(id) {
+                $0.state = .failed
+                $0.error = "无法创建目标文件：\(dest.path)"
+            }
+            endBGAssertion(id)
+            pump()
+            return
+        }
+
+        update(id) { $0.state = .downloading; $0.error = nil; $0.receivedBytes = 0 }
+
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 60 * 30
+        req.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
+
+        let task = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let (bytes, response) = try await self.fgSession.bytes(for: req)
+                let expected = response.expectedContentLength
+                await MainActor.run {
+                    self.update(id) { if expected > 0 { $0.totalBytes = expected } }
+                }
+
+                var buffer = Data()
+                buffer.reserveCapacity(1 << 16)
+                var received: Int64 = 0
+
+                for try await byte in bytes {
+                    buffer.append(byte)
+                    received += 1
+                    if buffer.count >= (1 << 16) {
+                        try handle.write(contentsOf: buffer)
+                        buffer.removeAll(keepingCapacity: true)
+                        let r = received, e = expected
+                        await MainActor.run {
+                            self.update(id) { $0.receivedBytes = r; if e > 0 { $0.totalBytes = e } }
+                        }
+                    }
+                }
+                if !buffer.isEmpty { try handle.write(contentsOf: buffer) }
+                try handle.close()
+                await MainActor.run {
+                    self.streamTasks.removeValue(forKey: id)
+                    self.finishFile(id: id, url: dest)
+                }
+            } catch {
+                try? handle.close()
+                try? self.fm.removeItem(at: dest)
+                await MainActor.run {
+                    self.streamTasks.removeValue(forKey: id)
+                    let ns = error as NSError
+                    self.update(id) {
+                        $0.state = .failed
+                        $0.error = "\(error.localizedDescription)  [\(ns.domain) \(ns.code)]"
+                    }
+                    self.endBGAssertion(id)
+                    self.pump()
+                }
+            }
+        }
+        streamTasks[id] = task
     }
 
     private func beginBGAssertion(_ id: UUID) {
@@ -315,6 +403,14 @@ final class DownloadManager: NSObject, ObservableObject {
     func pause(_ id: UUID) {
         guard let it = item(id) else { return }
 
+        // 流式任务：直接取消，状态存成暂停（下次从头下）
+        if let t = streamTasks.removeValue(forKey: id) {
+            t.cancel()
+            endBGAssertion(id)
+            update(id) { $0.state = .paused }
+            return
+        }
+
         bgSession.getAllTasks { [weak self] tasks in
             guard let self else { return }
             guard let t = tasks.first(where: { $0.taskDescription == id.uuidString }) as? URLSessionDownloadTask else { return }
@@ -341,17 +437,20 @@ final class DownloadManager: NSObject, ObservableObject {
     }
 
     func resume(_ id: UUID) {
+        usedFallback.remove(id)
         update(id) { $0.state = .queued; $0.error = nil }
         pump()
     }
 
     func retry(_ id: UUID) {
+        usedFallback.remove(id)          // 允许重新尝试后台通道
         update(id) { $0.state = .queued; $0.error = nil; $0.receivedBytes = 0; $0.hlsProgress = 0 }
         pump()
     }
 
     func cancel(_ id: UUID) {
         endBGAssertion(id)
+        if let t = streamTasks.removeValue(forKey: id) { t.cancel() }
         let idStr = id.uuidString
         bgSession.getAllTasks { tasks in
             tasks.first { $0.taskDescription == idStr }?.cancel()
@@ -552,7 +651,33 @@ final class DownloadManager: NSObject, ObservableObject {
         let cellular = !settings.wifiOnly
         bgSession.configuration.allowsCellularAccess = cellular
         hlsSession.configuration.allowsCellularAccess = cellular
+        fgSession.configuration.allowsCellularAccess = cellular
         pump()
+    }
+
+    // MARK: - 环境自检
+
+    func diagnose() -> DiagResult {
+        var d = DiagResult()
+        d.container = NSHomeDirectory()
+        let docs = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        d.documentsWritable = testWrite(docs)
+        d.tmpWritable = testWrite(URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true))
+        d.mediaDirExists = fm.fileExists(atPath: mediaDir.path)
+        try? fm.createDirectory(at: mediaDir, withIntermediateDirectories: true)
+        d.mediaWritable = testWrite(mediaDir)
+        return d
+    }
+
+    private func testWrite(_ dir: URL) -> Bool {
+        let f = dir.appendingPathComponent(".vsd-write-test")
+        do {
+            try Data([0x6f, 0x6b]).write(to: f)
+            try fm.removeItem(at: f)
+            return true
+        } catch {
+            return false
+        }
     }
 }
 
@@ -632,13 +757,9 @@ extension DownloadManager {
         let ns = error as NSError
         if ns.code == NSURLErrorCancelled { return }
 
-        // 后台会话在锁屏 / 切后台时写不了临时文件，会报「无法创建文件」这类错误。
-        // 不要直接判失败——自动降级到前台会话重下一次。
-        let fileErrors = [-3000, -3001, -3002, -3003, -3004, -3005, -3006, -3007]
-        if ns.domain == NSURLErrorDomain,
-           fileErrors.contains(ns.code),
-           session === bgSession,
-           !usedFallback.contains(id) {
+        // 后台通道任何失败，都换「流式 dataTask」再试一次——
+        // 这条通道不碰系统临时文件，绕开 NSURLErrorCannotCreateFile(-3000)。
+        if session === bgSession, !usedFallback.contains(id) {
             update(id) { $0.error = nil }
             startFallback(id)
             return

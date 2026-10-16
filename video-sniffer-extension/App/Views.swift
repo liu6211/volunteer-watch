@@ -545,6 +545,7 @@ struct NewTaskView: View {
 struct SettingsView: View {
     @EnvironmentObject var dm: DownloadManager
     @Environment(\.dismiss) private var dismiss
+    @State private var diag: DiagResult?
 
     var body: some View {
         NavigationStack {
@@ -583,6 +584,23 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+
+                Section("环境自检") {
+                    if let d = diag {
+                        LabeledContent("Documents 可写", value: d.documentsWritable ? "✅ 是" : "❌ 否")
+                        LabeledContent("媒体目录", value: d.mediaWritable ? "✅ 可写" : "❌ 不可写")
+                        LabeledContent("系统临时目录", value: d.tmpWritable ? "✅ 可写" : "❌ 不可写")
+                        Text(d.container)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    } else {
+                        Text("检测中…").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Text("下载失败时把这一节截图发我，能直接定位是容器不可写还是网络被拒。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             .navigationTitle("任务设置")
             .navigationBarTitleDisplayMode(.inline)
@@ -591,6 +609,7 @@ struct SettingsView: View {
                     Button("完成") { dismiss() }
                 }
             }
+            .onAppear { diag = dm.diagnose() }
         }
     }
 }
