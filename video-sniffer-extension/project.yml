@@ -1,0 +1,71 @@
+name: VideoSniffer
+options:
+  bundleIdPrefix: com.vsd
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+settings:
+  base:
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+    ENABLE_BITCODE: NO
+    ALWAYS_SEARCH_USER_PATHS: NO
+    # 两个 target 的 Bundle ID 都从这个变量派生，保证永远是「主ID」和「主ID.Extension」的关系。
+    # CI 里用 xcodebuild VSD_BUNDLE_ID=你的ID 覆盖即可，不用改文件。
+    VSD_BUNDLE_ID: com.vsd.VideoSniffer
+
+targets:
+  VideoSniffer:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(VSD_BUNDLE_ID)
+        PRODUCT_NAME: VideoSniffer
+        INFOPLIST_FILE: App/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_STYLE: Automatic
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks"
+    dependencies:
+      - target: VideoSnifferExtension
+        embed: true
+        codeSign: true
+
+  VideoSnifferExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Extension
+        excludes:
+          - "Resources/**"
+      - path: Extension/Resources
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(VSD_BUNDLE_ID).Extension
+        PRODUCT_NAME: VideoSnifferExtension
+        INFOPLIST_FILE: Extension/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_STYLE: Automatic
+        SKIP_INSTALL: YES
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
+    dependencies:
+      - sdk: SafariServices.framework
+
+schemes:
+  VideoSniffer:
+    build:
+      targets:
+        VideoSniffer: all
+    run:
+      config: Debug
+    archive:
+      config: Release
