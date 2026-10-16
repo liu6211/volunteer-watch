@@ -1,0 +1,118 @@
+name: build-safari-extension
+
+# 只在 vsd-extension 分支上触发，绝不碰 main。
+# 主分支原有的 Expo 编译流程（build-ios.yml）完全不受影响：
+# 它的触发条件是 `push: branches: [main]`，我们推的是 vsd-extension 分支。
+
+on:
+  push:
+    branches: [vsd-extension]
+  workflow_dispatch:
+
+jobs:
+  build:
+    # 跟随仓库既有经验：macos-26 自带较新的 Xcode，runner 可正常调度。
+    runs-on: macos-26
+    timeout-minutes: 40
+
+    defaults:
+      run:
+        working-directory: video-sniffer-extension
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 选择最新的 Xcode
+        run: |
+          ls -d /Applications/Xcode*.app || true
+          CHOSEN=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+          echo "Selecting: $CHOSEN"
+          sudo xcode-select -s "$CHOSEN"
+          xcode-select -p
+          xcodebuild -version
+          swift --version
+
+      - name: 安装 XcodeGen
+        run: brew install xcodegen
+
+      - name: 生成 Xcode 工程
+        run: xcodegen generate
+
+      - name: 校验扩展资源（manifest 引用 + JS 语法）
+        run: node scripts/validate.mjs
+
+      - name: 编译（不签名）
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project VideoSniffer.xcodeproj \
+            -scheme VideoSniffer \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            > /tmp/xcodebuild-ext.log 2>&1 || {
+              echo "===== error: 行 ====="
+              grep -n "error:" /tmp/xcodebuild-ext.log | head -40 || true
+              echo "===== 末尾 80 行 ====="
+              tail -80 /tmp/xcodebuild-ext.log
+              exit 1
+            }
+          tail -20 /tmp/xcodebuild-ext.log
+
+      - name: 扩展结构自检（避免产出没有扩展的废包）
+        run: |
+          set -e
+          APP=build/Build/Products/Release-iphoneos/VideoSniffer.app
+          echo "—— App 结构 ——"
+          find "$APP" -maxdepth 2 | sort
+
+          test -d "$APP/PlugIns/VideoSnifferExtension.appex" \
+            || { echo "::error::扩展没有嵌进 PlugIns/"; exit 1; }
+
+          APP_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist")
+          EXT_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/PlugIns/VideoSnifferExtension.appex/Info.plist")
+          POINT=$(/usr/libexec/PlistBuddy -c "Print :NSExtension:NSExtensionPointIdentifier" "$APP/PlugIns/VideoSnifferExtension.appex/Info.plist")
+
+          echo "主 App Bundle ID : $APP_ID"
+          echo "扩展   Bundle ID : $EXT_ID"
+          echo "扩展点           : $POINT"
+
+          test "$EXT_ID" = "$APP_ID.Extension" \
+            || { echo "::error::扩展 Bundle ID 必须是主 App ID 加 .Extension"; exit 1; }
+          test "$POINT" = "com.apple.Safari.web-extension" \
+            || { echo "::error::NSExtensionPointIdentifier 不对"; exit 1; }
+
+          for f in manifest.json background.js content.js popup.html; do
+            test -f "$APP/PlugIns/VideoSnifferExtension.appex/$f" \
+              || { echo "::error::扩展里缺少 $f"; exit 1; }
+          done
+          echo "扩展结构与 Bundle ID 关系全部正确 ✅"
+
+      - name: 打包未签名 IPA
+        run: |
+          rm -rf Payload VideoSniffer-unsigned.ipa
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/VideoSniffer.app Payload/
+          zip -qry VideoSniffer-unsigned.ipa Payload
+          echo "—— 包内容 ——"
+          unzip -l VideoSniffer-unsigned.ipa | head -30
+          ls -lh VideoSniffer-unsigned.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VideoSniffer-unsigned-ipa
+          path: video-sniffer-extension/VideoSniffer-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: 失败时上传完整日志
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-ext-log
+          path: /tmp/xcodebuild-ext.log
+          if-no-files-found: ignore
+          retention-days: 7
